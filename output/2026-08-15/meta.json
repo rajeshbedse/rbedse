@@ -1,0 +1,9 @@
+{
+  "run_date": "2026-08-15",
+  "filing_period": "3M",
+  "raw_filings": 3600,
+  "candidates": 68,
+  "shortlisted": 37,
+  "duration_s": 327,
+  "pipeline_version": "1.0.0"
+}

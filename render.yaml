@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: ryb-finserv
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-web.txt
+    startCommand: gunicorn --chdir portal --bind 0.0.0.0:$PORT app:app
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.9
+      - key: SECRET_KEY
+        generateValue: true
