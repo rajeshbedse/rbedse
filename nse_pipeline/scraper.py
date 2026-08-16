@@ -285,6 +285,10 @@ def run(browser_context, csv_path: Path) -> int:
     page.close()
     log.info("Found %d filing rows with detail links", len(rows_data))
 
+    if not rows_data:
+        log.info("No filing rows found. Skipping detail-page fetch.")
+        return 0
+
     # ── Step B: fan out to SCRAPER_WORKERS threads using requests ─────────────
     n       = len(rows_data)
     workers = min(SCRAPER_WORKERS, n)
