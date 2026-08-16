@@ -51,7 +51,7 @@
           <option value="diff-asc">Price vs reference: low to high</option>
           <option value="diff-desc">Price vs reference: high to low</option>
           <option value="symbol-asc">Symbol: A–Z</option>
-          <option value="date-desc">Latest buying first</option>
+          <option value="date-desc" selected>Latest buying first</option>
         </select>
       </label>
     </section>
@@ -77,7 +77,7 @@
       <div class="filter-sheet-actions"><button id="filter-reset" class="btn-secondary" type="button">Clear all</button><button id="filter-apply" class="btn-primary" type="button">Apply filters</button></div>
     </section>
 
-    <div class="scan-results-head"><div><strong id="result-count">Loading…</strong><span id="result-note"></span></div><button id="back-to-top" class="text-btn" type="button">Back to top ↑</button></div>
+    <div class="scan-results-head"><div><strong id="result-count">Loading…</strong><span id="result-note"></span></div></div>
 
     <div id="scan-loading" class="scan-loading" aria-live="polite"><span class="loading-spinner" aria-hidden="true"></span> Loading scan results…</div>
     <div id="scan-error" class="scan-error" hidden role="alert"><strong>Couldn't load this scan.</strong><span>Please refresh the page and try again.</span></div>

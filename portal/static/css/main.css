@@ -1264,3 +1264,348 @@ tr.row-expanded > td { background: var(--color-secondary-soft) !important; }
    Append this block to portal/static/css/main.css.
    Mobile layout is intentionally unchanged.
 */
+
+
+/* ──────────────────────────────────────────────────────────────────────────
+   RYB Finserv Scan UX v4.5 — desktop research cards
+   The scan is a research interface, not a spreadsheet. Desktop and mobile
+   use the same semantic stock card; the old wide table remains in the DOM
+   for graceful fallback but is visually replaced.
+   ────────────────────────────────────────────────────────────────────────── */
+
+@media (min-width: 769px) {
+  .scan-shell { max-width: 1180px; }
+
+  .desktop-table-wrap { display: none !important; }
+
+  .stock-cards {
+    display: block;
+  }
+
+  .stock-card {
+    border-color: #e2e8f0;
+    border-radius: 14px;
+    box-shadow: 0 3px 14px rgba(15,23,42,.045);
+    transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+  }
+
+  .stock-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 8px 24px rgba(15,23,42,.08);
+    transform: translateY(-1px);
+  }
+
+  .stock-card + .stock-card { margin-top: .65rem; }
+
+  .research-card-main {
+    display: block;
+    padding: 1rem 1.15rem .9rem;
+  }
+
+  .research-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.5rem;
+  }
+
+  .research-card-identity {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .research-card-symbol {
+    color: #0f172a;
+    font-size: 1.05rem;
+    font-weight: 850;
+    letter-spacing: .01em;
+    line-height: 1.2;
+  }
+
+  .research-card-identity .stock-company {
+    max-width: 44rem;
+    margin-top: .22rem;
+    font-size: .78rem;
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .research-card-decision {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+  }
+
+  .research-card-decision .stock-score {
+    min-width: 66px;
+    padding: .38rem .55rem;
+    border-radius: 9px;
+    font-size: 1rem;
+  }
+
+  .research-card-decision .table-category {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    min-width: 120px;
+    font-size: .76rem;
+    white-space: nowrap;
+  }
+
+  .research-card .ryb-score-meter {
+    margin: .75rem 0 .85rem;
+  }
+
+  .research-card .ryb-score-track {
+    height: 7px;
+  }
+
+  .research-card .ryb-score-marker {
+    width: 14px;
+    height: 14px;
+  }
+
+  .research-card-evidence {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0;
+    border-top: 1px solid #eef2f7;
+    border-bottom: 1px solid #eef2f7;
+    padding: .72rem 0;
+  }
+
+  .research-card-evidence > div {
+    min-width: 0;
+    padding: 0 .8rem;
+    border-right: 1px solid #eef2f7;
+  }
+
+  .research-card-evidence > div:first-child { padding-left: 0; }
+  .research-card-evidence > div:last-child {
+    padding-right: 0;
+    border-right: 0;
+  }
+
+  .research-card-evidence span {
+    display: block;
+    margin-bottom: .22rem;
+    color: #64748b;
+    font-size: .66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .035em;
+  }
+
+  .research-card-evidence strong {
+    display: block;
+    color: #172033;
+    font-size: .88rem;
+    font-weight: 800;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .research-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-top: .65rem;
+    color: #64748b;
+    font-size: .72rem;
+  }
+
+  .research-card-footer strong {
+    color: #334155;
+    font-weight: 750;
+  }
+
+  .research-card-footer .view-link {
+    margin-left: auto;
+    color: #1d4ed8;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1050px) {
+  .research-card-evidence {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: .7rem;
+  }
+
+  .research-card-evidence > div:nth-child(3),
+  .research-card-evidence > div:nth-child(6) {
+    border-right: 0;
+  }
+
+  .research-card-evidence > div:nth-child(4) {
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .stock-cards { display: block; }
+  .desktop-table-wrap { display: none; }
+
+  .research-card-main {
+    padding: 1rem;
+  }
+
+  .research-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .8rem;
+  }
+
+  .research-card-identity {
+    min-width: 0;
+  }
+
+  .research-card-symbol {
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 850;
+  }
+
+  .research-card-identity .stock-company {
+    max-width: 16rem;
+  }
+
+  .research-card-decision {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: .3rem;
+  }
+
+  .research-card-decision .table-category {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .68rem;
+    text-align: right;
+  }
+
+  .research-card-evidence {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: .7rem .5rem;
+    margin-top: .1rem;
+  }
+
+  .research-card-evidence > div {
+    min-width: 0;
+  }
+
+  .research-card-evidence span {
+    display: block;
+    color: #64748b;
+    font-size: .66rem;
+  }
+
+  .research-card-evidence strong {
+    display: block;
+    margin-top: .12rem;
+    font-size: .86rem;
+  }
+
+  .research-card-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: .7rem;
+    margin-top: .75rem;
+    padding-top: .65rem;
+    border-top: 1px solid #eef2f7;
+    color: #64748b;
+    font-size: .72rem;
+  }
+
+  .research-card-footer .view-link {
+    color: #1d4ed8;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 420px) {
+  .research-card-evidence {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .research-card-identity .stock-company {
+    max-width: 13rem;
+  }
+}
+
+
+/* ── Scan UX v4.5.1 polish ──────────────────────────────────────────────── */
+@media (min-width: 769px) {
+  .research-card-main {
+    padding: .82rem 1.05rem .72rem;
+  }
+
+  .research-card-head {
+    gap: 1.15rem;
+  }
+
+  .research-card-decision {
+    gap: .6rem;
+  }
+
+  .research-card-decision .stock-score {
+    min-width: 62px;
+    padding: .34rem .5rem;
+  }
+
+  .research-card-decision .table-category {
+    min-width: 0;
+  }
+
+  .research-card .ryb-score-meter {
+    margin: .52rem 0 .62rem;
+  }
+
+  .research-card .ryb-score-track {
+    height: 6px;
+  }
+
+  .research-card .ryb-score-marker {
+    width: 13px;
+    height: 13px;
+  }
+
+  .research-card .ryb-score-scale {
+    display: none;
+  }
+
+  .research-card-evidence {
+    padding: .58rem 0;
+  }
+
+  .research-card-evidence span {
+    margin-bottom: .16rem;
+  }
+
+  .research-card-footer {
+    padding-top: .5rem;
+    font-size: .7rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .research-card .ryb-score-scale {
+    display: none;
+  }
+
+  .research-card-footer {
+    margin-top: .55rem;
+    padding-top: .55rem;
+  }
+}

@@ -14,7 +14,15 @@
   const scoreValue = s => { const n = Number(s); return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : null; };
   const scoreMeter = (s, compact = false) => { const n = scoreValue(s); if (n == null) return ''; return `<div class="ryb-score-meter${compact ? ' ryb-score-meter--compact' : ''}" role="meter" aria-label="RYB Score" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${n}" style="--score:${n}%"><div class="ryb-score-track"><span class="ryb-score-marker"></span></div><div class="ryb-score-scale"><span>R</span><span>Y</span><span>B</span></div></div>`; };
   const categoryClass = c => ({'Strong Buy Setup':'strong-buy','Buy on Breakout':'buy-breakout','Watchlist':'watchlist','Fundamental Watch':'fund-watch','Avoid':'avoid'}[c] || '');
-  const fmtDate = s => s || '—';
+  const fmtDate = s => {
+    if (!s) return '—';
+    const value = String(s).trim();
+    const m = value.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (!m) return value;
+    const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+  };
   const crMoney = v => v == null || v === '' || !Number.isFinite(Number(v)) ? '—' : '₹' + Number(v).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' Cr';
   const parseDMY = value => {
     if (!value) return 0;
@@ -27,7 +35,7 @@
     return new Date(year, month - 1, day).getTime();
   };
 
-  let state = { view: 'shortlist', rows: [], search: '', band: 'all', category: 'all', sort: 'score-desc' };
+  let state = { view: 'shortlist', rows: [], search: '', band: 'all', category: 'all', sort: 'date-desc' };
   let lastFocused = null;
 
   async function getJSON(url) {
@@ -60,14 +68,35 @@
   function stockCard(r) {
     const cls = categoryClass(r.category);
     const diffCls = Number(r.price_diff_pct) < 0 ? 'negative' : 'positive';
-    return `<article class="stock-card" data-symbol="${esc(r.symbol)}">
-      <button class="stock-card-main" type="button" data-stock="${esc(r.symbol)}" aria-label="View analysis for ${esc(r.symbol)}">
-        <div class="stock-card-top"><div><span class="stock-symbol">${esc(r.symbol)}</span><span class="stock-company">${esc(r.company)}</span></div><div class="stock-score ${scoreClass(r.score)}">${r.score ?? '—'}<small>/100</small></div></div>
-        <div class="stock-setup"><span class="category-dot category-dot--${cls}"></span>${esc(r.category || 'Unclassified')}</div>
-        ${scoreMeter(r.score, true)}
-        <div class="stock-metrics"><div><span>CMP</span><strong>${money(r.last_price)}</strong></div><div><span>Reference</span><strong>${money(r.avg_price)}</strong></div><div><span>vs ref.</span><strong class="${diffCls}">${pct(r.price_diff_pct)}</strong></div></div>
-        <div class="stock-card-bottom"><span>Promoter ${r.promo_holding == null ? '—' : num(r.promo_holding) + '%'}</span><span>${crMoney(r.value_cr)} buying</span><span>${r.num_buy_txn || 0} txn</span><span class="view-link">View analysis →</span></div>
-        <div class="stock-card-date">Latest buying: <strong>${fmtDate(r.acq_to_dt)}</strong></div>
+    const score = r.score ?? '—';
+    return `<article class="stock-card research-card" data-symbol="${esc(r.symbol)}">
+      <button class="stock-card-main research-card-main" type="button" data-stock="${esc(r.symbol)}" aria-label="View analysis for ${esc(r.symbol)}">
+        <div class="research-card-head">
+          <div class="research-card-identity">
+            <div class="research-card-symbol">${esc(r.symbol)}</div>
+            <div class="stock-company">${esc(r.company)}</div>
+          </div>
+          <div class="research-card-decision">
+            <div class="stock-score ${scoreClass(r.score)}">${score}<small>/100</small></div>
+            <span class="table-category category-${cls}"><span class="category-dot category-dot--${cls}"></span>${esc(r.category || 'Unclassified')}</span>
+          </div>
+        </div>
+
+        ${scoreMeter(r.score, false)}
+
+        <div class="research-card-evidence">
+          <div><span>CMP</span><strong>${money(r.last_price)}</strong></div>
+          <div><span>Reference</span><strong>${money(r.avg_price)}</strong></div>
+          <div><span>vs Reference</span><strong class="${diffCls}">${pct(r.price_diff_pct)}</strong></div>
+          <div><span>Promoter</span><strong>${r.promo_holding == null ? '—' : num(r.promo_holding) + '%'}</strong></div>
+          <div><span>Buying</span><strong>${crMoney(r.value_cr)}</strong></div>
+          <div><span>Transactions</span><strong>${r.num_buy_txn || 0}</strong></div>
+        </div>
+
+        <div class="research-card-footer">
+          <span>Latest buying: <strong>${fmtDate(r.acq_to_dt)}</strong></span>
+          <span class="view-link">View analysis <span aria-hidden="true">→</span></span>
+        </div>
       </button>
     </article>`;
   }
@@ -119,6 +148,7 @@
 
   $('#scan-search').addEventListener('input', e => { state.search = e.target.value.trim(); $('#clear-search').hidden = !state.search; render(); });
   $('#clear-search').addEventListener('click', () => { $('#scan-search').value = ''; state.search = ''; $('#clear-search').hidden = true; render(); $('#scan-search').focus(); });
+  $('#scan-sort').value = state.sort;
   $('#scan-sort').addEventListener('change', e => { state.sort = e.target.value; render(); });
   $$('.filter-option').forEach(b => b.addEventListener('click', () => setFilter(b.dataset.filter, b.dataset.value)));
   $('#filter-toggle').addEventListener('click', () => { const open = $('#filter-toggle').getAttribute('aria-expanded') === 'true'; $('#filter-toggle').setAttribute('aria-expanded', String(!open)); $('#filter-sheet').hidden = open; });
@@ -126,7 +156,6 @@
   $('#filter-apply').addEventListener('click', () => { $('#filter-toggle').setAttribute('aria-expanded','false'); $('#filter-sheet').hidden = true; render(); });
   $('#filter-reset').addEventListener('click', () => { setFilter('band','all'); setFilter('category','all'); render(); });
   $('#empty-reset').addEventListener('click', () => { setFilter('band','all'); setFilter('category','all'); state.search=''; $('#scan-search').value=''; render(); });
-  $('#back-to-top').addEventListener('click', () => window.scrollTo({top:0, behavior:'smooth'}));
 
   function signalList(items) {
     return (items || []).map(s => `<li class="signal ${s.triggered ? 'on' : 'off'}"><span>${s.triggered ? '✓' : '×'}</span><div><strong>${esc(s.label)}</strong><small>${esc(s.note || '')}</small></div></li>`).join('');
