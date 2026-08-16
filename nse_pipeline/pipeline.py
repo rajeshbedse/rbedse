@@ -62,6 +62,10 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     date_str = run_date or datetime.now().strftime("%Y-%m-%d")
     run_dir  = _OUTPUT_ROOT / date_str
 
+    # Always create the date-specific output directory before
+    # any scraper, logger, or metadata operation writes into it.
+    run_dir.mkdir(parents=True, exist_ok=True)
+
     csv_path    = run_dir / CSV_FILENAME
     excel_path  = run_dir / EXCEL_FILENAME
     full_csv    = run_dir / FULL_CSV_FILENAME
