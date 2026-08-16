@@ -27,11 +27,11 @@
       </p>
 
       <div class="hero-quote-row">
-        <span class="hero-quote-mark">"</span>
+        <span class="hero-quote-mark">“</span>
         <blockquote class="hero-quote">
-          Compound interest is the eighth wonder of the world.<br>
-          He who understands it, earns it — he who doesn't, pays it.
-          <cite>— Albert Einstein</cite>
+          We don't predict the market.<br>
+          We study where informed capital is moving.
+          <cite>— RYB Finserv Research Principle</cite>
         </blockquote>
       </div>
 
@@ -46,70 +46,67 @@
       </div>
     </div>
 
-    <div class="hero-visual" aria-hidden="true">
+    <div class="hero-visual">
       {% if latest_stats and latest_stats.total %}
       {% set ls = latest_stats %}
-      <div class="hero-stats-panel">
-
-        <div class="hsp-header">
-          <span class="hsp-title">Latest Scan</span>
-          <span class="hsp-meta">
-            {% if latest %}{{ latest.display }}{% endif %}
-            &nbsp;·&nbsp;
-            <strong>{{ ls.total }}</strong> signals
-            {% if ls.score_avg is not none %}&nbsp;·&nbsp;avg score <strong>{{ ls.score_avg }}</strong>{% endif %}
-          </span>
+      <div class="hero-research-card">
+        <div class="hrc-topline">
+          <span class="hrc-kicker">Latest research</span>
+          <span class="hrc-date">{% if latest %}{{ latest.display }}{% endif %}</span>
         </div>
 
-        <div class="hsp-section">
-          <span class="hsp-section-label">Category breakdown</span>
-          <div class="hsp-seg-bar">
-            {% for cat in ls.cat_breakdown %}
-            <div class="hsp-seg-segment" style="width:{{ cat.pct }}%;background:{{ cat.color }};" title="{{ cat.label }}: {{ cat.count }}"></div>
-            {% endfor %}
-          </div>
-          <div class="hsp-seg-legend">
-            {% for cat in ls.cat_breakdown %}
-            <span class="hsp-seg-item">
-              <span class="hsp-seg-dot" style="background:{{ cat.color }};"></span>
-              {{ cat.label }}
-              <span class="hsp-seg-count">{{ cat.count }}</span>
-            </span>
-            {% endfor %}
-          </div>
+        <div class="hrc-summary">
+          <strong>{{ ls.total }}</strong>
+          <span>promoter signals identified</span>
         </div>
 
-        <div class="hsp-section hsp-split-row">
-          <div class="hsp-split-block hsp-split--above">
-            <span class="hsp-split-num">{{ ls.above_ref }}</span>
-            <span class="hsp-split-lbl">above ref price</span>
-          </div>
-          <div class="hsp-split-divider"></div>
-          <div class="hsp-split-block hsp-split--below">
-            <span class="hsp-split-num">{{ ls.below_ref }}</span>
-            <span class="hsp-split-lbl">below ref price</span>
-          </div>
-        </div>
-
-        {% if ls.top3 %}
-        <div class="hsp-section">
-          <span class="hsp-section-label">Top signals by score</span>
-          <div class="hsp-top3">
-            {% for s in ls.top3 %}
-            <div class="hsp-top3-row">
-              <span class="hsp-top3-sym">{{ s.symbol }}</span>
-              {% if s.score is not none %}
-              <span class="hsp-top3-score cat-dot cat-dot--{{ s.category_css }}" title="{{ s.category_css }}">{{ s.score }}</span>
-              {% endif %}
-              <span class="hsp-top3-delta {% if s.diff_pct >= 0 %}hsp-delta--up{% else %}hsp-delta--down{% endif %}">
-                {% if s.diff_pct >= 0 %}+{% endif %}{{ s.diff_pct }}%
-              </span>
+        {% if ls.featured %}
+        {% set f = ls.featured %}
+        <div class="hrc-feature">
+          <div class="hrc-feature-label">Strongest conviction</div>
+          <div class="hrc-feature-head">
+            <div>
+              <div class="hrc-symbol">{{ f.symbol }}</div>
+              <div class="hrc-company">{{ f.company }}</div>
             </div>
-            {% endfor %}
+            {% if f.score is not none %}
+            <span class="hrc-score">{{ f.score }}<small>/100</small></span>
+            {% endif %}
+          </div>
+
+          <div class="hrc-category">{{ f.category }}</div>
+
+          <div class="hrc-metrics">
+            <div>
+              <span>vs reference</span>
+              <strong class="{% if f.diff_pct >= 0 %}hrc-positive{% else %}hrc-negative{% endif %}">
+                {% if f.diff_pct >= 0 %}+{% endif %}{{ f.diff_pct }}%
+              </strong>
+            </div>
+            <div>
+              <span>Promoter holding</span>
+              <strong>{{ f.promo_holding }}%</strong>
+            </div>
+            <div>
+              <span>Buying</span>
+              <strong>₹{{ f.value_cr }} Cr</strong>
+            </div>
           </div>
         </div>
         {% endif %}
 
+        <div class="hrc-breadth">
+          <span><strong>{{ ls.above_ref }}</strong> above reference</span>
+          <span aria-hidden="true">·</span>
+          <span><strong>{{ ls.below_ref }}</strong> below reference</span>
+        </div>
+
+        {% if latest %}
+        <a class="hrc-link" href="{{ url_for('scan_detail', date_str=latest.date_str) }}">
+          Explore latest research
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        {% endif %}
       </div>
       {% endif %}
     </div>

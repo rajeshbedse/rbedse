@@ -251,7 +251,10 @@ button:focus-visible { outline: 2px solid var(--color-secondary); outline-offset
 }
 .hero-cta { display: flex; flex-wrap: wrap; gap: .75rem; }
 
-@media (max-width: 900px) { .hero-inner { grid-template-columns: 1fr; gap: 2.5rem; } .hero-visual { display: none; } }
+@media (max-width: 900px) {
+  .hero-inner { grid-template-columns: 1fr; gap: 2.25rem; }
+  .hero-visual { display: block; }
+}
 
 /* ── Hero stats panel ────────────────────────────────────────────────────── */
 .hero-stats-panel {
@@ -1066,3 +1069,198 @@ tr.row-expanded > td { background: var(--color-secondary-soft) !important; }
 .stock-card-date { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid rgba(30, 55, 90, .08); color: #64748b; font-size: .82rem; line-height: 1.35; }
 .stock-card-date strong { color: #334155; font-weight: 700; }
 @media (min-width: 769px) { .stock-card-date { display: none; } }
+
+
+/* ── 7e. Latest research hero card ─────────────────────────────────────────
+   Replaces the dashboard-style hero panel with one focused research story.
+*/
+.hero-research-card {
+  width: 100%;
+  max-width: 35rem;
+  margin-inline: auto;
+  padding: 1.35rem 1.4rem 1.15rem;
+  background: rgba(255,255,255,.055);
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 1.15rem;
+  box-shadow: 0 18px 50px rgba(0,0,0,.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.hrc-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: .8rem;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+}
+.hrc-kicker {
+  color: var(--hero-muted);
+  font-size: var(--text-xxs);
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.hrc-date {
+  color: var(--hero-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+.hrc-summary {
+  display: flex;
+  align-items: baseline;
+  gap: .55rem;
+  padding: 1rem 0 .95rem;
+}
+.hrc-summary strong {
+  color: var(--hero-text);
+  font-size: 2.15rem;
+  line-height: 1;
+  letter-spacing: -.04em;
+}
+.hrc-summary span {
+  color: var(--hero-secondary);
+  font-size: var(--text-sm);
+}
+.hrc-feature {
+  padding: 1rem 0 1.05rem;
+  border-top: 1px solid rgba(255,255,255,.07);
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+.hrc-feature-label {
+  margin-bottom: .6rem;
+  color: var(--hero-muted);
+  font-size: var(--text-xxs);
+  font-weight: 800;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.hrc-feature-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.hrc-symbol {
+  color: var(--hero-text);
+  font-size: 1.35rem;
+  font-weight: 850;
+  letter-spacing: -.025em;
+}
+.hrc-company {
+  max-width: 24rem;
+  margin-top: .18rem;
+  color: var(--hero-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+.hrc-score {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: .08rem;
+  padding: .38rem .55rem;
+  border-radius: .6rem;
+  background: rgba(74,222,128,.16);
+  color: #86efac;
+  font-size: 1.25rem;
+  font-weight: 850;
+}
+.hrc-score small {
+  font-size: .65em;
+  font-weight: 700;
+  opacity: .85;
+}
+.hrc-category {
+  display: inline-flex;
+  align-items: center;
+  margin-top: .65rem;
+  padding: .28rem .55rem;
+  border-radius: 99px;
+  background: rgba(255,255,255,.07);
+  color: var(--hero-text);
+  font-size: var(--text-xxs);
+  font-weight: 750;
+}
+.hrc-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: .75rem;
+  margin-top: 1rem;
+}
+.hrc-metrics > div {
+  min-width: 0;
+}
+.hrc-metrics span {
+  display: block;
+  margin-bottom: .22rem;
+  color: var(--hero-muted);
+  font-size: var(--text-xxs);
+  font-weight: 650;
+}
+.hrc-metrics strong {
+  color: var(--hero-text);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+.hrc-metrics .hrc-positive { color: #4ade80; }
+.hrc-metrics .hrc-negative { color: #fca5a5; }
+.hrc-breadth {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  padding: .85rem 0 .75rem;
+  color: var(--hero-secondary);
+  font-size: var(--text-xs);
+}
+.hrc-breadth strong {
+  color: var(--hero-text);
+  font-weight: 800;
+}
+.hrc-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  padding-top: .8rem;
+  border-top: 1px solid rgba(255,255,255,.07);
+  color: #dbeafe;
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+.hrc-link svg {
+  transition: transform .18s ease;
+}
+.hrc-link:hover {
+  color: #fff;
+}
+.hrc-link:hover svg {
+  transform: translateX(3px);
+}
+.hrc-link:focus-visible {
+  outline-color: #fff;
+  outline-offset: 4px;
+}
+
+@media (max-width: 900px) {
+  .hero-research-card { max-width: 44rem; }
+}
+@media (max-width: 640px) {
+  .hero-research-card {
+    padding: 1.1rem 1rem .95rem;
+    border-radius: 1rem;
+  }
+  .hrc-summary { padding: .9rem 0 .85rem; }
+  .hrc-summary strong { font-size: 1.9rem; }
+  .hrc-feature { padding: .9rem 0; }
+  .hrc-symbol { font-size: 1.2rem; }
+  .hrc-metrics { gap: .55rem; }
+  .hrc-metrics strong { font-size: .84rem; }
+  .hrc-breadth { font-size: .78rem; }
+}
+
+/* RYB Finserv Scan UX v4.4 — 100% desktop density refinement
+   Append this block to portal/static/css/main.css.
+   Mobile layout is intentionally unchanged.
+*/

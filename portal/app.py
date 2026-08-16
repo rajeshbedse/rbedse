@@ -685,7 +685,7 @@ def _latest_stats(date_str: str) -> dict:
     Falls back to all-zero values when data is unavailable.
     """
     empty = dict(cat_breakdown=[], above_ref=0, below_ref=0,
-                 total=0, score_avg=None, top3=[])
+                 total=0, score_avg=None, top3=[], featured=None)
     df = _load_filtered(date_str)
     if df is None or df.empty:
         return empty
@@ -740,6 +740,24 @@ def _latest_stats(date_str: str) -> dict:
                 "diff_pct"    : round(pct, 1),
             })
 
+    # ── featured signal ──────────────────────────────────────────────────────
+    featured = None
+    if top3:
+        top_symbol = top3[0]["symbol"]
+        top_match = df[df["Symbol"].astype(str) == str(top_symbol)]
+        if not top_match.empty:
+            row = top_match.iloc[0]
+            featured = {
+                "symbol": row.get("Symbol", ""),
+                "company": row.get("CompanyName", ""),
+                "score": top3[0]["score"],
+                "category": row.get("Category", ""),
+                "diff_pct": top3[0]["diff_pct"],
+                "promo_holding": _clean(row.get("PromoHolding")),
+                "value_cr": _clean(row.get("ValueCr")),
+                "num_buy_txn": int(row.get("NumBuyTxn") or 0),
+            }
+
     return dict(
         cat_breakdown=cat_breakdown,
         above_ref=above_ref,
@@ -747,6 +765,7 @@ def _latest_stats(date_str: str) -> dict:
         total=total,
         score_avg=score_avg,
         top3=top3,
+        featured=featured,
     )
 
 
