@@ -63,7 +63,27 @@ jobs:
 
       - name: Validate generated snapshot
         run: |
-          python -m nse_pipeline.validate_output --date "${{ steps.date.outputs.run_date }}"
+          RUN_DATE="${{ steps.date.outputs.run_date }}"
+
+          echo "========================================"
+          echo "Validating run date: ${RUN_DATE}"
+          echo "========================================"
+
+          echo ""
+          echo "Output directory:"
+          ls -lah "output/${RUN_DATE}/"
+
+          echo ""
+          echo "meta.json:"
+          if [ -f "output/${RUN_DATE}/meta.json" ]; then
+            cat "output/${RUN_DATE}/meta.json"
+          else
+            echo "ERROR: meta.json does not exist"
+          fi
+
+          echo ""
+          echo "Running validator:"
+          python -m nse_pipeline.validate_output --date "${RUN_DATE}"
 
       - name: Publish daily snapshot to Git
         env:
