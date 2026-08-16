@@ -100,6 +100,36 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
         log.info("Re-run without --dry-run to proceed with enrichment and export.")
         return run_dir
 
+    # No NSE filings means the market/data source had no usable data
+    # for this run date (weekend, NSE holiday, or temporary no-data response).
+    # Do not attempt enrichment/report generation and do not publish.
+    if raw_count == 0:
+        duration = round(time.monotonic() - pipeline_start)
+
+        meta = {
+            "run_date": date_str,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "status": "no_data",
+            "filing_period": NSE_FILING_PERIOD,
+            "raw_filings": 0,
+            "failed_urls": 0,
+            "candidates": 0,
+            "shortlisted": 0,
+            "duration_s": duration,
+            "pipeline_version": __version__,
+        }
+
+        meta_path.write_text(
+            json.dumps(meta, indent=2),
+            encoding="utf-8",
+        )
+
+        log.info("No NSE filings found for %s. Skipping enrichment.", date_str)
+        log.info("meta.json → %s", meta_path)
+
+        return run_dir
+
+    # Phase 2 — analyse
     # Phase 2 — analyse (prices from Bhavcopy; no browser needed)
     final = analyzer.run(csv_path, full_csv)
 
@@ -126,7 +156,7 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     meta = {
         "run_date"      : date_str,
         "generated_at"  : datetime.now(timezone.utc).isoformat(),
-        "status"        : "success",
+	"status"        : "success",
         "filing_period" : NSE_FILING_PERIOD,
         "raw_filings"   : raw_count,
         "failed_urls"   : failed_urls,

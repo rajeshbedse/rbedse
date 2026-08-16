@@ -2,6 +2,11 @@ name: Daily NSE Scan
 
 on:
   workflow_dispatch:
+    inputs:
+      run_date:
+        description: "Run date (YYYY-MM-DD). Leave blank for today."
+        required: false
+        type: string
   schedule:
     # 20:30 IST (15:00 UTC), Monday-Friday
     - cron: "0 15 * * 1-5"
@@ -40,9 +45,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb
 
-      - name: Determine India run date
+      - name: Determine run date
         id: date
-        run: echo "run_date=$(TZ=Asia/Kolkata date +%F)" >> "$GITHUB_OUTPUT"
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.run_date }}" ]; then
+            echo "run_date=${{ inputs.run_date }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_date=$(TZ=Asia/Kolkata date +%F)" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Run NSE pipeline
         env:
@@ -58,12 +69,24 @@ jobs:
         env:
           RUN_DATE: ${{ steps.date.outputs.run_date }}
         run: |
+          STATUS=$(python -c "import json; print(json.load(open('output/${RUN_DATE}/meta.json', encoding='utf-8-sig')).get('status', 'unknown'))")
+
+          echo "Snapshot status: ${STATUS}"
+
+          if [ "${STATUS}" != "success" ]; then
+            echo "Snapshot is not publishable (${STATUS}). Nothing will be committed."
+            exit 0
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add "output/${RUN_DATE}/"
+
           if git diff --cached --quiet; then
             echo "No output changes to commit."
             exit 0
           fi
+
           git commit -m "Daily NSE scan: ${RUN_DATE}"
           git push

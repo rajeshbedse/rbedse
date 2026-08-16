@@ -83,7 +83,7 @@ def validate(run_dir: Path) -> list[str]:
     if meta_path.is_file():
         try:
             meta = json.loads(
-                meta_path.read_text(encoding="utf-8")
+                meta_path.read_text(encoding="utf-8-sig")
             )
         except Exception as exc:
             errors.append(f"Invalid meta.json: {exc}")
@@ -96,6 +96,9 @@ def validate(run_dir: Path) -> list[str]:
         warnings.append(
             "meta.json has no status field; treating as legacy snapshot"
         )
+    elif status == "no_data":
+        print("NO DATA: NSE returned no filings for this run date.")
+        return []
     elif status != "success":
         errors.append(
             f"meta.json status is not success: {status!r}"
