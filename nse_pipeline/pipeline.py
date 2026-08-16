@@ -202,3 +202,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     run(skip_phase1=args.skip_phase1, run_date=args.date, dry_run=args.dry_run)
+
+
+if __name__ == "__main__":
+    main()
