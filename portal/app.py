@@ -15,7 +15,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
-from flask import Flask, abort, render_template, request
+from flask import Flask, abort, jsonify, render_template, request
 from markupsafe import Markup
 
 log = logging.getLogger(__name__)
@@ -767,39 +767,95 @@ def index():
     )
 
 
-@app.route("/scan/<date_str>")
-def scan_detail(date_str: str):
-    # Validate format before using in a filesystem path
+def _validate_scan_date(date_str: str) -> datetime:
+    """Validate a scan date and ensure its output directory exists."""
     try:
         dt = datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError:
         abort(404)
-
-    d = OUTPUT_DIR / date_str
-    if not d.is_dir():
+    if not (OUTPUT_DIR / date_str).is_dir():
         abort(404)
+    return dt
 
-    df_filtered    = _load_filtered(date_str)
-    df_full        = _load_full(date_str)
-    trades_by_sym  = _load_trades(date_str) or {}
 
-    filtered_rows  = _df_to_rows(df_filtered) if df_filtered is not None else []
-    candidate_rows = _df_to_rows(df_full, include_flags=True) if df_full is not None else []
+def _row_summary(r: dict, idx: int, include_flags: bool = False) -> dict:
+    """Small payload used by the scan list; detailed signals load on demand."""
+    score = r.get("Score")
+    entry = {
+        "_row_index": idx,
+        "symbol": r.get("Symbol", ""),
+        "company": r.get("CompanyName", ""),
+        "last_price": _clean(r.get("LastPrice")),
+        "avg_price": _clean(r.get("AvgPrice")),
+        "price_diff_pct": float(r.get("PriceDiffPct") or 0),
+        "promo_holding": _clean(r.get("PromoHolding")),
+        "value_cr": _clean(r.get("ValueCr")),
+        "num_buy_txn": int(r.get("NumBuyTxn") or 0),
+        "acq_to_dt": r.get("acqtoDt", ""),
+        "score": int(score) if score is not None and str(score) not in ("", "nan") else None,
+        "category": r.get("Category") or "",
+        "category_css": _CATEGORY_CSS.get(r.get("Category") or "", ""),
+        "band": _band_label(float(r.get("PriceDiffPct") or 0)),
+    }
+    if include_flags:
+        entry["has_pledging"] = bool(r.get("HasPledging", False))
+        entry["has_sell"] = bool(r.get("HasMarketSell", False))
+    return entry
 
-    # Attach trade rows to each filtered result row for the drill-down drawer
-    for row in filtered_rows:
-        row["trades"] = trades_by_sym.get(row["symbol"], [])
 
+def _summary_rows(df: pd.DataFrame | None, include_flags: bool = False) -> list[dict]:
+    if df is None or df.empty:
+        return []
+    return [_row_summary(r, idx, include_flags) for idx, r in enumerate(df.to_dict(orient="records"))]
+
+
+@app.route("/scan/<date_str>")
+def scan_detail(date_str: str):
+    dt = _validate_scan_date(date_str)
+    df_filtered = _load_filtered(date_str)
+    df_full = _load_full(date_str)
     return render_template(
         "scan.html",
         date_str=date_str,
         display_date=dt.strftime("%d %b %Y"),
         weekday=dt.strftime("%A"),
-        filtered_rows=filtered_rows,
-        candidate_rows=candidate_rows,
-        filtered_json=json.dumps(filtered_rows),
-        candidate_json=json.dumps(candidate_rows),
+        shortlist_count=len(df_filtered) if df_filtered is not None else 0,
+        reviewed_count=len(df_full) if df_full is not None else 0,
     )
+
+
+@app.get("/api/scan/<date_str>/summary")
+def scan_summary(date_str: str):
+    _validate_scan_date(date_str)
+    view = request.args.get("view", "shortlist")
+    if view == "candidates":
+        rows = _summary_rows(_load_full(date_str), include_flags=True)
+    else:
+        rows = _summary_rows(_load_filtered(date_str), include_flags=False)
+    return jsonify({"date": date_str, "view": view, "rows": rows})
+
+
+@app.get("/api/scan/<date_str>/stock/<symbol>")
+def scan_stock_detail(date_str: str, symbol: str):
+    _validate_scan_date(date_str)
+    symbol = symbol.strip().upper()
+    if not symbol or len(symbol) > 30 or not all(ch.isalnum() or ch in "&-_" for ch in symbol):
+        abort(404)
+
+    df = _load_filtered(date_str)
+    if df is None or df.empty or "Symbol" not in df.columns:
+        df = _load_full(date_str)
+    if df is None or df.empty:
+        abort(404)
+
+    matches = df[df["Symbol"].astype(str).str.upper() == symbol]
+    if matches.empty:
+        abort(404)
+
+    raw = matches.iloc[0].to_dict()
+    row = _df_to_rows(pd.DataFrame([raw]), include_flags=True)[0]
+    row["trades"] = (_load_trades(date_str) or {}).get(symbol, [])
+    return jsonify(row)
 
 
 @app.get("/healthz")

@@ -1,300 +1,174 @@
-/* RYB Finserv — scan.js  v2 */
+/* RYB Finserv — scan UX v3: mobile cards + lazy stock detail */
 (function () {
   'use strict';
+  const root = document.querySelector('.scan-page');
+  if (!root) return;
+  const date = root.dataset.scanDate;
+  const $ = (s, c = document) => c.querySelector(s);
+  const $$ = (s, c = document) => Array.from(c.querySelectorAll(s));
+  const esc = v => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const money = v => v == null || v === '' ? '—' : '₹' + Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2});
+  const num = v => v == null || v === '' ? '—' : Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2});
+  const pct = v => v == null || v === '' ? '—' : `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)}%`;
+  const scoreClass = s => Number(s) >= 65 ? 'score-high' : Number(s) >= 50 ? 'score-mid' : Number(s) >= 40 ? 'score-ok' : 'score-low';
+  const scoreValue = s => { const n = Number(s); return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : null; };
+  const scoreMeter = (s, compact = false) => { const n = scoreValue(s); if (n == null) return ''; return `<div class="ryb-score-meter${compact ? ' ryb-score-meter--compact' : ''}" role="meter" aria-label="RYB Score" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${n}" style="--score:${n}%"><div class="ryb-score-track"><span class="ryb-score-marker"></span></div><div class="ryb-score-scale"><span>R</span><span>Y</span><span>B</span></div></div>`; };
+  const categoryClass = c => ({'Strong Buy Setup':'strong-buy','Buy on Breakout':'buy-breakout','Watchlist':'watchlist','Fundamental Watch':'fund-watch','Avoid':'avoid'}[c] || '');
+  const fmtDate = s => s || '—';
+  const crMoney = v => v == null || v === '' || !Number.isFinite(Number(v)) ? '—' : '₹' + Number(v).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' Cr';
+  const parseDMY = value => {
+    if (!value) return 0;
+    const parts = String(value).split('-');
+    if (parts.length !== 3) return 0;
+    const day = Number(parts[0]);
+    const month = Number(parts[1]);
+    const year = Number(parts[2]);
+    if (!day || !month || !year) return 0;
+    return new Date(year, month - 1, day).getTime();
+  };
 
-  /* ── helpers ──────────────────────────────────────────────────────────────── */
-  function qs(sel, ctx) { return (ctx || document).querySelector(sel); }
-  function qsa(sel, ctx) { return Array.from((ctx || document).querySelectorAll(sel)); }
+  let state = { view: 'shortlist', rows: [], search: '', band: 'all', category: 'all', sort: 'score-desc' };
+  let lastFocused = null;
 
-  function debounce(fn, ms) {
-    var t;
-    return function () { clearTimeout(t); t = setTimeout(fn, ms); };
+  async function getJSON(url) {
+    const res = await fetch(url, {headers: {'Accept':'application/json'}});
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
   }
 
-  /* ── tab switching — Audit §12: click + keyboard ←→ Home End ──────────────── */
-  var tabBtns   = qsa('.tab-btn');
-  var tabPanels = { shortlist: qs('#panel-shortlist'), candidates: qs('#panel-candidates') };
-
-  function activateTab(btn) {
-    tabBtns.forEach(function (b) {
-      b.classList.remove('active');
-      b.setAttribute('aria-selected', 'false');
-      b.setAttribute('tabindex', '-1');
+  function visibleRows() {
+    let rows = state.rows.slice();
+    const q = state.search.toLowerCase();
+    if (q) rows = rows.filter(r => `${r.symbol} ${r.company}`.toLowerCase().includes(q));
+    if (state.band !== 'all') rows = rows.filter(r => state.band === 'below' ? r.price_diff_pct < 0 : r.band === state.band);
+    if (state.category !== 'all') rows = rows.filter(r => r.category === state.category);
+    const [field, direction] = state.sort.split('-');
+    rows.sort((a, b) => {
+      let av, bv;
+      if (field === 'score') { av = a.score ?? -Infinity; bv = b.score ?? -Infinity; }
+      else if (field === 'value') { av = a.value_cr ?? -Infinity; bv = b.value_cr ?? -Infinity; }
+      else if (field === 'diff') { av = a.price_diff_pct ?? -Infinity; bv = b.price_diff_pct ?? -Infinity; }
+      else if (field === 'symbol') { av = a.symbol || ''; bv = b.symbol || ''; }
+      else if (field === 'date') { av = parseDMY(a.acq_to_dt); bv = parseDMY(b.acq_to_dt); }
+      else { av = parseDMY(a.acq_to_dt); bv = parseDMY(b.acq_to_dt); }
+      if (typeof av === 'string') return direction === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      return direction === 'asc' ? av - bv : bv - av;
     });
-    btn.classList.add('active');
-    btn.setAttribute('aria-selected', 'true');
-    btn.setAttribute('tabindex', '0');
-    btn.focus();
-    var panelId = btn.getAttribute('aria-controls');
-    Object.values(tabPanels).forEach(function (p) { if (p) p.hidden = true; });
-    var panel = qs('#' + panelId);
-    if (panel) panel.hidden = false;
+    return rows;
   }
 
-  tabBtns.forEach(function (btn) {
-    btn.addEventListener('click', function () { activateTab(btn); });
-    btn.addEventListener('keydown', function (e) {
-      var idx = tabBtns.indexOf(btn);
-      if (e.key === 'ArrowRight') { e.preventDefault(); activateTab(tabBtns[(idx + 1) % tabBtns.length]); }
-      if (e.key === 'ArrowLeft')  { e.preventDefault(); activateTab(tabBtns[(idx - 1 + tabBtns.length) % tabBtns.length]); }
-      if (e.key === 'Home')       { e.preventDefault(); activateTab(tabBtns[0]); }
-      if (e.key === 'End')        { e.preventDefault(); activateTab(tabBtns[tabBtns.length - 1]); }
-    });
-  });
-  /* init tabindex for roving tabindex pattern */
-  tabBtns.forEach(function (b, i) { b.setAttribute('tabindex', i === 0 ? '0' : '-1'); });
-
-  /* ── generic sortable table ─────────────────────────────────────────────── */
-  function initSortableTable(tableId) {
-    var table = qs('#' + tableId);
-    if (!table) return;
-    var panel  = table.closest('[role="tabpanel"]');
-    var tbody  = qs('#tbody-' + tableId.replace('table-', ''));
-    if (!tbody) return;
-
-    /* JSON data embedded in sibling <script> tag */
-    var rawScript = qs('#data-' + tableId.replace('table-', ''));
-    var data = [];
-    if (rawScript) {
-      try { data = JSON.parse(rawScript.textContent); } catch (e) { data = []; }
-    }
-
-    /*
-     * Build row maps ONCE at init time, before any DOM manipulation.
-     * rowByIndex : "0" → <tr data-row-index="0">   (data rows only)
-     * drawerById : "trades-0" → <tr id="trades-0"> (drawer rows)
-     * Both are captured before renderAll ever touches the DOM.
-     */
-    var rowByIndex  = {};
-    var drawerById  = {};
-    var rowBySymbol = {};
-
-    qsa('tr', tbody).forEach(function (row) {
-      if (row.classList.contains('trades-drawer')) {
-        drawerById[row.id] = row;
-      } else {
-        if (row.dataset.rowIndex !== undefined) {
-          rowByIndex[String(row.dataset.rowIndex)] = row;
-        }
-        if (row.dataset.symbol) {
-          rowBySymbol[row.dataset.symbol] = row;
-        }
-      }
-    });
-
-    var sortState      = { col: null, dir: 1 };
-    var currentSearch  = '';
-    var currentBand    = 'all';
-    var currentCategory = 'all';
-
-    /* category chips — only chips that carry data-category */
-    var catChips = panel ? qsa('.chip[data-category]', panel) : [];
-    catChips.forEach(function (chip) {
-      chip.addEventListener('click', function () {
-        catChips.forEach(function (c) { c.classList.remove('chip--active'); });
-        chip.classList.add('chip--active');
-        currentCategory = chip.dataset.category || 'all';
-        renderAll();
-      });
-    });
-
-    /* sort header clicks */
-    var ths = qsa('.th-sort', table);
-    ths.forEach(function (th) {
-      th.addEventListener('click', function () { sortBy(th.dataset.col); });
-      th.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sortBy(th.dataset.col); }
-      });
-    });
-
-    function sortBy(col) {
-      if (sortState.col === col) { sortState.dir *= -1; }
-      else { sortState.col = col; sortState.dir = 1; }
-      ths.forEach(function (th) { th.setAttribute('aria-sort', 'none'); });
-      var activeTh = qsa('.th-sort[data-col="' + col + '"]', table)[0];
-      if (activeTh) {
-        activeTh.setAttribute('aria-sort', sortState.dir === 1 ? 'ascending' : 'descending');
-      }
-      renderAll();
-    }
-
-    /* search */
-    var searchInput = qs('#search-' + tableId.replace('table-', ''), panel || document);
-    if (searchInput) {
-      searchInput.addEventListener('input', debounce(function () {
-        currentSearch = searchInput.value.toLowerCase().trim();
-        renderAll();
-      }, 180));
-    }
-
-    /* band chips — only chips that carry data-band */
-    var bandChips = panel ? qsa('.chip[data-band]', panel) : [];
-    bandChips.forEach(function (chip) {
-      chip.addEventListener('click', function () {
-        bandChips.forEach(function (c) { c.classList.remove('chip--active'); });
-        chip.classList.add('chip--active');
-        currentBand = chip.dataset.band || 'all';
-        renderAll();
-      });
-    });
-
-    /* ── render ─────────────────────────────────────────────────────────────── */
-    function renderAll() {
-      /* 1. filter */
-      var filtered = data.slice();
-
-      if (currentSearch) {
-        filtered = filtered.filter(function (r) {
-          return r.symbol.toLowerCase().includes(currentSearch) ||
-                 (r.company || '').toLowerCase().includes(currentSearch);
-        });
-      }
-
-      if (currentBand !== 'all') {
-        if (currentBand === 'below') {
-          filtered = filtered.filter(function (r) { return r.price_diff_pct < 0; });
-        } else {
-          filtered = filtered.filter(function (r) { return r.band === currentBand; });
-        }
-      }
-
-      if (currentCategory && currentCategory !== 'all') {
-        filtered = filtered.filter(function (r) { return r.category === currentCategory; });
-      }
-
-      /* 2. sort */
-      if (sortState.col) {
-        var col = sortState.col;
-        filtered.sort(function (a, b) {
-          var av = a[col], bv = b[col];
-          if (av === null || av === undefined) return 1;
-          if (bv === null || bv === undefined) return -1;
-          if (col === 'acq_to_dt') {
-            var toNum = function (s) {
-              var p = String(s).split('-');
-              return p.length === 3 ? parseInt(p[2] + p[1] + p[0], 10) : 0;
-            };
-            av = toNum(av); bv = toNum(bv);
-          } else if (typeof av === 'string') {
-            av = av.toLowerCase(); bv = bv.toLowerCase();
-          }
-          return av < bv ? -sortState.dir : av > bv ? sortState.dir : 0;
-        });
-      }
-
-      /* 3. reorder DOM — move each filtered data row + its drawer into place */
-      var shownIdxSet = {};
-      filtered.forEach(function (r) {
-        var idx    = r._row_index !== undefined ? String(r._row_index) : null;
-        var row    = idx !== null ? rowByIndex[idx] : rowBySymbol[r.symbol];
-        if (!row) return;
-
-        var drawer = idx !== null ? (drawerById['trades-' + idx] || null) : null;
-
-        tbody.appendChild(row);
-        if (drawer) tbody.appendChild(drawer);
-
-        shownIdxSet[idx || r.symbol] = true;
-      });
-
-      /* 4. show/hide data rows */
-      data.forEach(function (r) {
-        var idx = r._row_index !== undefined ? String(r._row_index) : null;
-        var row = idx !== null ? rowByIndex[idx] : rowBySymbol[r.symbol];
-        if (!row) return;
-        var key  = idx || r.symbol;
-        var show = !!shownIdxSet[key];
-        row.style.display = show ? '' : 'none';
-
-        /* 5. collapse drawer if its row is filtered out */
-        var drawer = idx !== null ? (drawerById['trades-' + idx] || null) : null;
-        if (drawer && !show) {
-          drawer.classList.remove('drawer-open');
-          var btn = row.querySelector('.expand-btn');
-          if (btn) btn.setAttribute('aria-expanded', 'false');
-          row.classList.remove('row-expanded');
-        }
-        /* if show: leave drawer in whatever open/closed state the user left it */
-      });
-
-      /* 6. count note */
-      var noteEl = qs('#' + tableId.replace('table-', '') + '-count-note');
-      if (noteEl) {
-        noteEl.textContent = filtered.length === data.length
-          ? ''
-          : 'Showing ' + filtered.length + ' of ' + data.length + ' stocks';
-      }
-    }
+  function stockCard(r) {
+    const cls = categoryClass(r.category);
+    const diffCls = Number(r.price_diff_pct) < 0 ? 'negative' : 'positive';
+    return `<article class="stock-card" data-symbol="${esc(r.symbol)}">
+      <button class="stock-card-main" type="button" data-stock="${esc(r.symbol)}" aria-label="View analysis for ${esc(r.symbol)}">
+        <div class="stock-card-top"><div><span class="stock-symbol">${esc(r.symbol)}</span><span class="stock-company">${esc(r.company)}</span></div><div class="stock-score ${scoreClass(r.score)}">${r.score ?? '—'}<small>/100</small></div></div>
+        <div class="stock-setup"><span class="category-dot category-dot--${cls}"></span>${esc(r.category || 'Unclassified')}</div>
+        ${scoreMeter(r.score, true)}
+        <div class="stock-metrics"><div><span>CMP</span><strong>${money(r.last_price)}</strong></div><div><span>Reference</span><strong>${money(r.avg_price)}</strong></div><div><span>vs ref.</span><strong class="${diffCls}">${pct(r.price_diff_pct)}</strong></div></div>
+        <div class="stock-card-bottom"><span>Promoter ${r.promo_holding == null ? '—' : num(r.promo_holding) + '%'}</span><span>${crMoney(r.value_cr)} buying</span><span>${r.num_buy_txn || 0} txn</span><span class="view-link">View analysis →</span></div>
+        <div class="stock-card-date">Latest buying: <strong>${fmtDate(r.acq_to_dt)}</strong></div>
+      </button>
+    </article>`;
   }
 
-  initSortableTable('table-shortlist');
-  initSortableTable('table-candidates');
+  function tableRow(r) {
+    const cls = categoryClass(r.category);
+    const diffCls = Number(r.price_diff_pct) < 0 ? 'negative' : 'positive';
+    return `<tr><td><div class="table-stock"><span class="stock-symbol">${esc(r.symbol)}</span><span>${esc(r.company)}</span></div></td><td><div class="table-score-wrap"><span class="table-score ${scoreClass(r.score)}">${r.score ?? '—'}</span>${scoreMeter(r.score, true)}</div></td><td><span class="table-category category-${cls}">${esc(r.category || '—')}</span></td><td>${money(r.last_price)}</td><td>${money(r.avg_price)}</td><td class="${diffCls}">${pct(r.price_diff_pct)}</td><td>${r.promo_holding == null ? '—' : num(r.promo_holding)+'%'}</td><td>${crMoney(r.value_cr)}</td><td>${fmtDate(r.acq_to_dt)}</td><td><button class="view-stock-btn" type="button" data-stock="${esc(r.symbol)}">View →</button></td></tr>`;
+  }
 
-  /* ── Promoter trades drawer (expand/collapse) ──────────────────────────── */
-  document.addEventListener('click', function (e) {
-    var btn = e.target.closest('.expand-btn');
-    if (!btn) return;
+  function render() {
+    const rows = visibleRows();
+    $('#scan-error').hidden = true;
+    $('#result-count').textContent = `${rows.length} stock${rows.length === 1 ? '' : 's'}`;
+    $('#result-note').textContent = rows.length !== state.rows.length ? ` · ${state.rows.length} total` : '';
+    $('#stock-cards').innerHTML = rows.map(stockCard).join('');
+    $('#scan-tbody').innerHTML = rows.map(tableRow).join('');
+    $('#scan-empty').hidden = rows.length !== 0;
+    $('#stock-cards').hidden = rows.length === 0;
+    $('.desktop-table-wrap').hidden = rows.length === 0;
+    $$('#stock-cards [data-stock], #scan-tbody [data-stock]').forEach(b => b.addEventListener('click', () => openDetail(b.dataset.stock)));
+    updateFilterCount();
+  }
 
-    var isExpanded = btn.getAttribute('aria-expanded') === 'true';
-    var drawerId   = btn.getAttribute('aria-controls');
-    var drawer     = drawerId ? document.getElementById(drawerId) : null;
-    var parentRow  = btn.closest('tr');
+  function updateFilterCount() {
+    const n = (state.band !== 'all' ? 1 : 0) + (state.category !== 'all' ? 1 : 0);
+    $('#filter-count').hidden = n === 0; $('#filter-count').textContent = n;
+  }
 
-    if (!drawer) return;
+  async function loadView(view) {
+    state.view = view;
+    $('#scan-loading').hidden = false; $('#scan-error').hidden = true; $('#stock-cards').hidden = true; $('.desktop-table-wrap').hidden = true;
+    try { const data = await getJSON(`/api/scan/${date}/summary?view=${view}`); state.rows = data.rows || []; render(); }
+    catch (e) { console.error(e); $('#scan-error').hidden = false; $('#result-count').textContent = 'Unable to load'; }
+    finally { $('#scan-loading').hidden = true; }
+  }
 
-    if (isExpanded) {
-      btn.setAttribute('aria-expanded', 'false');
-      drawer.classList.remove('drawer-open');
-      if (parentRow) parentRow.classList.remove('row-expanded');
-    } else {
-      btn.setAttribute('aria-expanded', 'true');
-      drawer.classList.add('drawer-open');
-      if (parentRow) parentRow.classList.add('row-expanded');
+  function setFilter(group, value) {
+    state[group] = value;
+    $$(`.filter-option[data-filter="${group}"]`).forEach(b => b.classList.toggle('is-active', b.dataset.value === value));
+  }
+
+  $$('.scan-tab').forEach(tab => tab.addEventListener('click', () => {
+    $$('.scan-tab').forEach(t => { t.classList.remove('is-active'); t.setAttribute('aria-selected','false'); });
+    tab.classList.add('is-active'); tab.setAttribute('aria-selected','true');
+    state.search = ''; $('#scan-search').value = ''; $('#clear-search').hidden = true;
+    loadView(tab.dataset.view);
+  }));
+
+  $('#scan-search').addEventListener('input', e => { state.search = e.target.value.trim(); $('#clear-search').hidden = !state.search; render(); });
+  $('#clear-search').addEventListener('click', () => { $('#scan-search').value = ''; state.search = ''; $('#clear-search').hidden = true; render(); $('#scan-search').focus(); });
+  $('#scan-sort').addEventListener('change', e => { state.sort = e.target.value; render(); });
+  $$('.filter-option').forEach(b => b.addEventListener('click', () => setFilter(b.dataset.filter, b.dataset.value)));
+  $('#filter-toggle').addEventListener('click', () => { const open = $('#filter-toggle').getAttribute('aria-expanded') === 'true'; $('#filter-toggle').setAttribute('aria-expanded', String(!open)); $('#filter-sheet').hidden = open; });
+  $('#filter-close').addEventListener('click', () => { $('#filter-toggle').setAttribute('aria-expanded','false'); $('#filter-sheet').hidden = true; });
+  $('#filter-apply').addEventListener('click', () => { $('#filter-toggle').setAttribute('aria-expanded','false'); $('#filter-sheet').hidden = true; render(); });
+  $('#filter-reset').addEventListener('click', () => { setFilter('band','all'); setFilter('category','all'); render(); });
+  $('#empty-reset').addEventListener('click', () => { setFilter('band','all'); setFilter('category','all'); state.search=''; $('#scan-search').value=''; render(); });
+  $('#back-to-top').addEventListener('click', () => window.scrollTo({top:0, behavior:'smooth'}));
+
+  function signalList(items) {
+    return (items || []).map(s => `<li class="signal ${s.triggered ? 'on' : 'off'}"><span>${s.triggered ? '✓' : '×'}</span><div><strong>${esc(s.label)}</strong><small>${esc(s.note || '')}</small></div></li>`).join('');
+  }
+  function metric(label, value, note='') { return `<div class="detail-metric"><span>${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<small>${esc(note)}</small>` : ''}</div>`; }
+  function detailPanel(row, tab) {
+    const groups = {promoter: row.promo_signals, fundamentals: row.fund_signals, technical: row.tech_signals, risk: row.risk_signals};
+    if (tab === 'overview') {
+      return `<div class="detail-section"><h3>Why this stock?</h3><ul class="signal-list">${signalList([...(row.promo_signals||[]).filter(s=>s.triggered).slice(0,2), ...(row.fund_signals||[]).filter(s=>s.triggered).slice(0,2), ...(row.tech_signals||[]).filter(s=>s.triggered).slice(0,1)]) || '<li>No positive signals available.</li>'}</ul></div>
+      <div class="detail-section"><h3>Key fundamentals</h3><div class="detail-metric-grid">${metric('Market cap', money(row.market_cap_cr) + (row.market_cap_cr != null ? ' Cr' : ''))}${metric('P/E', num(row.pe))}${metric('Revenue growth', row.rev_growth_pct == null ? '—' : pct(row.rev_growth_pct))}${metric('PAT growth', row.pat_growth_pct == null ? '—' : pct(row.pat_growth_pct))}${metric('ROCE', row.roce_pct == null ? '—' : pct(row.roce_pct))}${metric('Debt / Equity', num(row.de_ratio))}</div></div>`;
     }
-  });
-
-  /* ── Symbol tooltips — position fixed tooltip under hovered symbol ───────── */
-  document.addEventListener('mouseover', function (e) {
-    var wrap = e.target.closest('.symbol-wrap');
-    if (!wrap) return;
-    var tip = wrap.querySelector('.company-tooltip');
-    if (!tip) return;
-    var rect = wrap.getBoundingClientRect();
-    tip.style.top  = (rect.bottom + 6) + 'px';
-    tip.style.left = rect.left + 'px';
-  });
-
-  /* ── Fundamental metric tooltips — viewport-clamped fixed positioning ─────── */
-  document.addEventListener('mouseover', function (e) {
-    var wrap = e.target.closest('.fs-tip-wrap');
-    if (!wrap) return;
-    var box = wrap.querySelector('.fs-tip-box');
-    if (!box) return;
-
-    var iconRect = wrap.getBoundingClientRect();
-    var boxW     = box.offsetWidth || 310;
-    var boxH     = box.offsetHeight || 200;
-    var vw       = window.innerWidth;
-    var gap      = 8;   /* px between arrow tip and icon top */
-
-    /* Preferred: above the icon, left-aligned to icon */
-    var top  = iconRect.top - boxH - gap;
-    var left = iconRect.left;
-
-    /* If box goes above viewport, flip below the icon instead */
-    if (top < 8) {
-      top = iconRect.bottom + gap;
-      box.setAttribute('data-flip', 'down');
-    } else {
-      box.removeAttribute('data-flip');
+    if (tab === 'transactions') {
+      const trades = row.trades || [];
+      return `<div class="detail-section"><div class="section-heading-row"><div><h3>Promoter buying</h3><span>${trades.length} transaction${trades.length===1?'':'s'}</span></div></div>${trades.length ? `<div class="transaction-list">${trades.map(t=>`<article class="transaction-card"><div><strong>${esc(t['Name of Person'] || 'Promoter')}</strong><span>${esc(t['Category of Person'] || '')}</span></div><div class="transaction-grid"><div><small>Shares</small><strong>${num(t['Securities Acquired/Disposed (No.)'])}</strong></div><div><small>Value</small><strong>${money(t['Securities Acquired/Disposed (Value)'] ? Number(String(t['Securities Acquired/Disposed (Value)']).replace(/,/g,'')) : null)}</strong></div><div><small>Post holding</small><strong>${esc(t['Securities Held Post (%)'] || '—')}</strong></div><div><small>Date</small><strong>${esc(t['Date To'] || t['Date From'] || '—')}</strong></div></div>${t['Details URL'] ? `<a href="${esc(t['Details URL'])}" target="_blank" rel="noopener noreferrer">View NSE filing ↗</a>` : ''}</article>`).join('')}</div>` : '<div class="empty-detail">No transaction details available.</div>'}</div>`;
     }
+    return `<div class="detail-section"><h3>${tab === 'fundamentals' ? 'Fundamental signals' : tab === 'technical' ? 'Technical signals' : 'Risk signals'}</h3><ul class="signal-list">${signalList(groups[tab])}</ul></div>`;
+  }
 
-    /* Clamp horizontally so box never escapes left or right edge */
-    if (left + boxW > vw - 8) { left = vw - boxW - 8; }
-    if (left < 8)              { left = 8; }
+  function openDetail(symbol) {
+    lastFocused = document.activeElement;
+    const modal = $('#stock-modal'); modal.hidden = false; modal.setAttribute('aria-hidden','false'); document.body.classList.add('modal-open');
+    $('#detail-loading').hidden = false; $('#detail-content').hidden = true; $('#detail-title').textContent = symbol; $('#detail-panel').innerHTML = '';
+    fetch(`/api/scan/${date}/stock/${encodeURIComponent(symbol)}`).then(r => { if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }).then(row => {
+      $('#detail-loading').hidden = true; $('#detail-content').hidden = false;
+      $('#detail-title').textContent = row.symbol; $('#detail-company').textContent = row.company;
+      $('#detail-category').textContent = row.category || 'Research candidate'; $('#detail-category').className = `detail-category category-${categoryClass(row.category)}`;
+      $('#detail-score').textContent = row.score ?? '—'; $('#detail-score').className = scoreClass(row.score);
+      $('#detail-score-meter').innerHTML = scoreMeter(row.score);
+      $('#detail-nse').href = `https://www.nseindia.com/get-quotes/equity?symbol=${encodeURIComponent(row.symbol)}`;
+      const diffCls = Number(row.price_diff_pct) < 0 ? 'negative' : 'positive';
+      $('#detail-price-grid').innerHTML = `${metric('CMP', money(row.last_price))}${metric('Promoter reference', money(row.avg_price))}${metric('vs reference', pct(row.price_diff_pct))}${metric('Promoter holding', row.promo_holding == null ? '—' : num(row.promo_holding)+'%')}${metric('Buying value', crMoney(row.value_cr))}${metric('Transactions', row.num_buy_txn || 0)}`;
+      const positives = [...(row.promo_signals||[]), ...(row.fund_signals||[]), ...(row.tech_signals||[])].filter(s=>s.triggered).slice(0,5);
+      $('#detail-why').innerHTML = `<div><span class="why-eyebrow">WHY THIS STOCK?</span><strong>${esc(row.category || 'Research candidate')}</strong></div><ul>${positives.map(s=>`<li>✓ ${esc(s.label)}</li>`).join('')}</ul>`;
+      $$('.detail-tab').forEach(t=>{t.classList.toggle('is-active',t.dataset.detailTab==='overview');t.setAttribute('aria-selected',t.dataset.detailTab==='overview'?'true':'false');});
+      $('#detail-panel').innerHTML = detailPanel(row,'overview');
+      $$('.detail-tab').forEach(t=>t.onclick=()=>{ $$('.detail-tab').forEach(x=>{x.classList.remove('is-active');x.setAttribute('aria-selected','false')}); t.classList.add('is-active');t.setAttribute('aria-selected','true');$('#detail-panel').innerHTML=detailPanel(row,t.dataset.detailTab); });
+      $('#detail-back').focus();
+    }).catch(e => { console.error(e); $('#detail-loading').textContent = 'Unable to load this stock analysis. Please try again.'; });
+  }
+  function closeDetail() { $('#stock-modal').hidden=true; $('#stock-modal').setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open'); if(lastFocused) lastFocused.focus(); }
+  $('#detail-back').addEventListener('click', closeDetail); $('[data-close-modal]').addEventListener('click', closeDetail);
+  document.addEventListener('keydown', e => { if(e.key==='Escape' && !$('#stock-modal').hidden) closeDetail(); });
 
-    box.style.top  = top  + 'px';
-    box.style.left = left + 'px';
-  });
-
+  loadView('shortlist');
 })();

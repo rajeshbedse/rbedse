@@ -1,547 +1,130 @@
 {% extends "base.html" %}
 
 {% block title %}Report {{ display_date }} — RYB Finserv{% endblock %}
-{% block meta_desc %}RYB Finserv research report for {{ display_date }}. {{ filtered_rows|length }} quality-screened stocks.{% endblock %}
+{% block meta_desc %}RYB Finserv research report for {{ display_date }}. {{ shortlist_count }} quality-screened stocks.{% endblock %}
 
 {% block content %}
-<!-- ── Page Header ──────────────────────────────────────────────────────── -->
-<div class="page-header">
-  <div class="container">
-    <nav class="breadcrumb" aria-label="Breadcrumb">
-      <a href="{{ url_for('index') }}" class="bc-link">Dashboard</a>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-      <span class="bc-current" aria-current="page">{{ display_date }}</span>
-    </nav>
-    <div class="page-header-content">
-      <div>
-        <h1 class="page-title">
-          <span class="page-title-weekday">{{ weekday }}</span>
-          {{ display_date }}
-        </h1>
-        <p class="page-sub">Research report · Based on publicly available regulatory disclosures</p>
-      </div>
-      <div class="page-header-stats" style="flex-wrap:wrap;">
-        <div class="stat-block">
-          <span class="stat-num">{{ filtered_rows|length }}</span>
-          <span class="stat-lbl">Shortlisted</span>
+<div class="scan-page" data-scan-date="{{ date_str }}">
+  <div class="page-header scan-header">
+    <div class="container">
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <a href="{{ url_for('index') }}" class="bc-link">Dashboard</a>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="bc-current" aria-current="page">{{ display_date }}</span>
+      </nav>
+      <div class="page-header-content">
+        <div>
+          <h1 class="page-title"><span class="page-title-weekday">{{ weekday }}</span>{{ display_date }}</h1>
+          <p class="page-sub">Promoter buying research · Explore the strongest setups first</p>
         </div>
-        <div class="stat-block">
-          <span class="stat-num">{{ candidate_rows|length }}</span>
-          <span class="stat-lbl">Reviewed</span>
+        <div class="page-header-stats scan-stats">
+          <div class="stat-block"><span class="stat-num">{{ shortlist_count }}</span><span class="stat-lbl">Shortlist</span></div>
+          <div class="stat-block"><span class="stat-num">{{ reviewed_count }}</span><span class="stat-lbl">Reviewed</span></div>
         </div>
       </div>
     </div>
   </div>
+
+  <main class="container section scan-shell">
+    <div class="scan-tabs" role="tablist" aria-label="Scan result views">
+      <button class="scan-tab is-active" role="tab" aria-selected="true" aria-controls="scan-panel" data-view="shortlist">
+        Shortlist <span class="scan-tab-count">{{ shortlist_count }}</span>
+      </button>
+      <button class="scan-tab" role="tab" aria-selected="false" aria-controls="scan-panel" data-view="candidates">
+        All Reviewed <span class="scan-tab-count">{{ reviewed_count }}</span>
+      </button>
+    </div>
+
+    <section class="scan-toolbar" aria-label="Scan controls">
+      <div class="scan-search-wrap">
+        <svg class="scan-search-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="scan-search" type="search" autocomplete="off" placeholder="Search stock or company…" aria-label="Search stocks" />
+        <button id="clear-search" class="icon-btn" type="button" aria-label="Clear search" hidden>×</button>
+      </div>
+      <button id="filter-toggle" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filter-sheet">
+        <span aria-hidden="true">☷</span> Filters <span id="filter-count" class="filter-count" hidden>0</span>
+      </button>
+      <label class="sort-select-wrap" for="scan-sort">Sort
+        <select id="scan-sort" aria-label="Sort results">
+          <option value="score-desc">Score: high to low</option>
+          <option value="value-desc">Promoter buying: high to low</option>
+          <option value="diff-asc">Price vs reference: low to high</option>
+          <option value="diff-desc">Price vs reference: high to low</option>
+          <option value="symbol-asc">Symbol: A–Z</option>
+          <option value="date-desc">Latest buying first</option>
+        </select>
+      </label>
+    </section>
+
+    <section id="filter-sheet" class="filter-sheet" aria-label="Filters" hidden>
+      <div class="filter-sheet-head"><div><strong>Refine results</strong><span>Use one or more filters</span></div><button id="filter-close" class="icon-btn" type="button" aria-label="Close filters">×</button></div>
+      <div class="filter-group"><span class="filter-label">Price vs promoter reference</span><div class="filter-options" data-filter-group="band">
+        <button class="filter-option is-active" data-filter="band" data-value="all">All</button>
+        <button class="filter-option" data-filter="band" data-value="below">Below reference</button>
+        <button class="filter-option" data-filter="band" data-value="within10">0–10%</button>
+        <button class="filter-option" data-filter="band" data-value="within20">11–20%</button>
+        <button class="filter-option" data-filter="band" data-value="within30">21–30%</button>
+        <button class="filter-option" data-filter="band" data-value="beyond30">&gt;30%</button>
+      </div></div>
+      <div class="filter-group"><span class="filter-label">Category</span><div class="filter-options" data-filter-group="category">
+        <button class="filter-option is-active" data-filter="category" data-value="all">All</button>
+        <button class="filter-option" data-filter="category" data-value="Strong Buy Setup">Strong Buy</button>
+        <button class="filter-option" data-filter="category" data-value="Buy on Breakout">Breakout</button>
+        <button class="filter-option" data-filter="category" data-value="Watchlist">Watchlist</button>
+        <button class="filter-option" data-filter="category" data-value="Fundamental Watch">Fundamental Watch</button>
+        <button class="filter-option" data-filter="category" data-value="Avoid">Avoid</button>
+      </div></div>
+      <div class="filter-sheet-actions"><button id="filter-reset" class="btn-secondary" type="button">Clear all</button><button id="filter-apply" class="btn-primary" type="button">Apply filters</button></div>
+    </section>
+
+    <div class="scan-results-head"><div><strong id="result-count">Loading…</strong><span id="result-note"></span></div><button id="back-to-top" class="text-btn" type="button">Back to top ↑</button></div>
+
+    <div id="scan-loading" class="scan-loading" aria-live="polite"><span class="loading-spinner" aria-hidden="true"></span> Loading scan results…</div>
+    <div id="scan-error" class="scan-error" hidden role="alert"><strong>Couldn't load this scan.</strong><span>Please refresh the page and try again.</span></div>
+
+    <section id="scan-panel" role="tabpanel" aria-label="Scan results">
+      <div id="stock-cards" class="stock-cards"></div>
+      <div class="desktop-table-wrap">
+        <table id="scan-table" class="research-table" aria-label="Stock scan results">
+          <thead><tr>
+            <th>Stock</th><th>Score</th><th>Setup</th><th>CMP</th><th>Ref.</th><th>Δ%</th><th>Promoter</th><th>Buy value</th><th>Date</th><th></th>
+          </tr></thead>
+          <tbody id="scan-tbody"></tbody>
+        </table>
+      </div>
+      <div id="scan-empty" class="scan-empty" hidden><div class="scan-empty-icon">⌕</div><strong>No stocks match these filters</strong><span>Try clearing a filter or searching for another symbol.</span><button id="empty-reset" class="btn-secondary" type="button">Clear filters</button></div>
+    </section>
+  </main>
 </div>
 
-<!-- ── Tabs ──────────────────────────────────────────────────────────────── -->
-<div class="container section">
-  <div class="tab-bar" role="tablist" aria-label="Result views">
-    <button class="tab-btn active" role="tab" aria-selected="true"  aria-controls="panel-shortlist" id="tab-shortlist">
-      Quality Shortlist
-      <span class="tab-count">{{ filtered_rows|length }}</span>
-    </button>
-    <button class="tab-btn"        role="tab" aria-selected="false" aria-controls="panel-candidates" id="tab-candidates">
-      All Reviewed
-      <span class="tab-count">{{ candidate_rows|length }}</span>
-    </button>
-  </div>
-
-  <!-- ── Shortlist Panel ─────────────────────────────────────────────────── -->
-  <div id="panel-shortlist" role="tabpanel" aria-labelledby="tab-shortlist">
-    {% if filtered_rows %}
-    <!-- Controls -->
-    <div class="table-controls">
-      <div class="search-wrap">
-        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="search" id="search-shortlist" class="search-input" placeholder="Search symbol or company…" aria-label="Search shortlist" />
+<!-- Stock detail: modal on desktop, full-screen research view on mobile -->
+<div id="stock-modal" class="stock-modal" hidden aria-hidden="true">
+  <div class="stock-modal-backdrop" data-close-modal></div>
+  <section class="stock-detail" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+    <header class="stock-detail-header">
+      <button id="detail-back" class="detail-back" type="button"><span aria-hidden="true">←</span> Back to results</button>
+      <a id="detail-nse" class="detail-nse-link" href="#" target="_blank" rel="noopener noreferrer">NSE ↗</a>
+    </header>
+    <div id="detail-loading" class="detail-loading"><span class="loading-spinner" aria-hidden="true"></span> Loading analysis…</div>
+    <div id="detail-content" hidden>
+      <div class="detail-hero">
+        <div><span id="detail-category" class="detail-category"></span><h2 id="detail-title"></h2><p id="detail-company"></p></div>
+        <div class="detail-score-block"><div class="detail-score"><span id="detail-score">—</span><small>/100</small><span>RYB Score</span></div><div id="detail-score-meter"></div></div>
       </div>
-      <div class="filter-chips" role="group" aria-label="Band filter">
-        <button class="chip chip--active" data-band="all">All</button>
-        <button class="chip" data-band="within10">±0–10%</button>
-        <button class="chip" data-band="within20">±11–20%</button>
-        <button class="chip" data-band="within30">±21–30%</button>
-        <button class="chip" data-band="beyond30">&gt;30%</button>
-        <button class="chip chip--below" data-band="below">Below ref. price</button>
+      <div id="detail-why" class="why-card"></div>
+      <div class="detail-price-grid" id="detail-price-grid"></div>
+      <div class="detail-tabs" role="tablist" aria-label="Stock analysis sections">
+        <button class="detail-tab is-active" data-detail-tab="overview" role="tab" aria-selected="true">Overview</button>
+        <button class="detail-tab" data-detail-tab="promoter" role="tab" aria-selected="false">Promoter</button>
+        <button class="detail-tab" data-detail-tab="fundamentals" role="tab" aria-selected="false">Fundamentals</button>
+        <button class="detail-tab" data-detail-tab="technical" role="tab" aria-selected="false">Technical</button>
+        <button class="detail-tab" data-detail-tab="risk" role="tab" aria-selected="false">Risk</button>
+        <button class="detail-tab" data-detail-tab="transactions" role="tab" aria-selected="false">Transactions</button>
       </div>
-      <div class="filter-chips" role="group" aria-label="Category filter" style="margin-left:.25rem;">
-        <button class="chip chip--active" data-category="all" id="cat-chip-all">All categories</button>
-        <button class="chip chip--cat-strong-buy"   data-category="Strong Buy Setup"><span class="cat-dot cat-dot--strong-buy" aria-hidden="true"></span> Strong Buy</button>
-        <button class="chip chip--cat-buy-breakout" data-category="Buy on Breakout"><span class="cat-dot cat-dot--buy-breakout" aria-hidden="true"></span> Breakout</button>
-        <button class="chip chip--cat-watchlist"    data-category="Watchlist"><span class="cat-dot cat-dot--watchlist" aria-hidden="true"></span> Watchlist</button>
-        <button class="chip chip--cat-fund-watch"   data-category="Fundamental Watch"><span class="cat-dot cat-dot--fund-watch" aria-hidden="true"></span> Fundamental Watch</button>
-        <button class="chip chip--cat-avoid"        data-category="Avoid"><span class="cat-dot cat-dot--avoid" aria-hidden="true"></span> Avoid</button>
-      </div>
+      <div id="detail-panel" class="detail-panel"></div>
     </div>
-    <div class="table-wrap">
-      <table class="data-table" id="table-shortlist" aria-label="Shortlisted stocks">
-        <thead>
-          <tr>
-            <th class="th-sort col-symbol"   data-col="symbol"         tabindex="0" role="columnheader" aria-sort="none">Symbol <span class="sort-icon" aria-hidden="true"></span></th>
-            <th class="th-sort col-score"    data-col="score"          tabindex="0" role="columnheader" aria-sort="descending">Score <span class="sort-icon" aria-hidden="true">↓</span></th>
-            <th class="col-cat-dot" title="Category">Cat</th>
-            <th class="th-sort col-cmp"      data-col="last_price"     tabindex="0" role="columnheader" aria-sort="none">CMP (&#8377;) <span class="sort-icon" aria-hidden="true"></span></th>
-            <th class="th-sort col-ref"      data-col="avg_price"      tabindex="0" role="columnheader" aria-sort="none">Ref (&#8377;) <span class="sort-icon" aria-hidden="true"></span></th>
-            <th class="th-sort col-delta"    data-col="price_diff_pct" tabindex="0" role="columnheader" aria-sort="none">Δ% <span class="sort-icon" aria-hidden="true"></span></th>
-            <th class="th-sort col-hold"     data-col="promo_holding"  tabindex="0" role="columnheader" aria-sort="none">Hold% <span class="sort-icon" aria-hidden="true"></span></th>
-            <th class="th-sort col-value"    data-col="value_cr"       tabindex="0" role="columnheader" aria-sort="none">&#8377;Cr <span class="sort-icon" aria-hidden="true"></span></th>
-            <th class="th-sort col-date"     data-col="acq_to_dt"      tabindex="0" role="columnheader" aria-sort="none">Date <span class="sort-icon" aria-hidden="true"></span></th>
-          </tr>
-        </thead>
-        <tbody id="tbody-shortlist">
-          {% for r in filtered_rows %}
-          <tr class="row-band--{{ r.band }} {% if r.price_diff_pct < 0 %}row-below{% endif %} {% if r.trades %}row-expandable{% endif %}"
-              data-symbol="{{ r.symbol }}"
-              data-company="{{ r.company|lower }}"
-              data-band="{{ r.band }}"
-              data-below="{{ 'true' if r.price_diff_pct < 0 else 'false' }}"
-              data-category="{{ r.category }}"
-              data-row-index="{{ loop.index0 }}"
-              {% if r.trades %}data-has-trades="true"{% endif %}>
-            <td class="td-symbol">
-              {% if r.trades %}
-              <button class="expand-btn" aria-expanded="false"
-                      aria-controls="trades-{{ loop.index0 }}"
-                      aria-label="Show details for {{ r.symbol }}"
-                      title="Show buying details and fundamentals">
-                <svg class="expand-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-              </button>
-              {% endif %}
-              <span class="symbol-wrap" data-company="{{ r.company }}">
-                <a href="https://www.nseindia.com/get-quotes/equity?symbol={{ r.symbol }}"
-                   target="_blank" rel="noopener noreferrer" class="symbol-link"
-                   aria-label="{{ r.symbol }} — {{ r.company }} on NSE (opens in new tab)">
-                  {{ r.symbol }}
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                </a>
-                <span class="company-tooltip">{{ r.company }}</span>
-              </span>
-            </td>
-            <!-- Score cell -->
-            <td class="td-num td-score">
-              {% if r.score is not none %}
-              <div class="score-meter" aria-label="Score {{ r.score }} out of 100">
-                <span class="score-value {% if r.score >= 65 %}score-high{% elif r.score >= 50 %}score-mid{% elif r.score >= 40 %}score-ok{% else %}score-low{% endif %}">{{ r.score }}</span>
-                <div class="score-bar-track" aria-hidden="true">
-                  <div class="score-bar-fill {% if r.score >= 65 %}score-bar--high{% elif r.score >= 50 %}score-bar--mid{% elif r.score >= 40 %}score-bar--ok{% else %}score-bar--low{% endif %}"
-                       style="width:{{ r.score }}%"></div>
-                </div>
-              </div>
-              {% else %}—{% endif %}
-            </td>
-            <!-- Category dot -->
-            <td class="td-cat-dot" title="{{ r.category }}">
-              <span class="cat-dot cat-dot--{{ r.category_css }}" aria-label="{{ r.category }}"></span>
-            </td>
-            <td class="td-num">&#8377;{{ "%.2f"|format(r.last_price) if r.last_price is not none else "—" }}</td>
-            <td class="td-num">&#8377;{{ "%.2f"|format(r.avg_price) if r.avg_price is not none else "—" }}</td>
-            <td class="td-num td-diff {% if r.price_diff_pct < 0 %}diff-neg{% elif r.price_diff_pct > 0 %}diff-pos{% endif %}">
-              {% if r.price_diff_pct < 0 %}
-                <span class="diff-badge diff-badge--neg">{{ "%.1f"|format(r.price_diff_pct) }}%</span>
-              {% else %}
-                <span class="diff-badge diff-badge--pos">+{{ "%.1f"|format(r.price_diff_pct) }}%</span>
-              {% endif %}
-            </td>
-            <td class="td-num">{{ "%.1f"|format(r.promo_holding) if r.promo_holding is not none else "—" }}%</td>
-            <td class="td-num">{{ "%.2f"|format(r.value_cr) if r.value_cr is not none else "—" }}</td>
-            <td class="td-date">{{ r.acq_to_dt }}</td>
-          </tr>
-          {% if r.trades %}
-          <tr class="trades-drawer" id="trades-{{ loop.index0 }}">
-            <td colspan="9" class="trades-drawer-cell">
-              <div class="trades-drawer-inner">
-
-                <!-- ── Score breakdown panel ─────────────────────────── -->
-                {% if r.score is not none %}
-                <div class="score-breakdown">
-
-                  <div class="score-breakdown-title">
-                    <span class="sb-ryb-icon" aria-hidden="true">
-                      <span class="sb-ryb-dot sb-ryb-dot--r"></span>
-                      <span class="sb-ryb-dot sb-ryb-dot--y"></span>
-                      <span class="sb-ryb-dot sb-ryb-dot--b"></span>
-                    </span>
-                    RYB Score
-                    <span class="sb-total-score">{{ r.score }} / 100</span>
-                  </div>
-
-                  <!-- 4 horizontal bands — each = bar anchor (left) + chips (right) -->
-
-                  {# ── Macro: renders one horizontal band ──────────────────── #}
-                  {# band(label, bar_class, pts, max_pts, signals, is_risk) #}
-
-                  <!-- BAND 1: Promoter Signal -->
-                  <div class="sb-band sb-band--blue">
-                    <div class="sb-band-left">
-                      <span class="sb-band-label">Promoter</span>
-                      <div class="sb-bar-wrap">
-                        <div class="sb-bar sb-bar--blue" style="width:{{ (r.score_promo / 25 * 100)|round|int if r.score_promo is not none else 0 }}%;"></div>
-                      </div>
-                      <span class="sb-band-pts">{{ r.score_promo if r.score_promo is not none else "—" }}<span class="sb-band-max">/25</span></span>
-                    </div>
-                    <div class="sb-band-chips">
-                      {% for sig in r.promo_signals %}
-                      <span class="sb-chip{% if sig.triggered %} sb-chip--on{% else %} sb-chip--off{% endif %}" title="{{ sig.note }} (+{{ sig.pts }} pts)">
-                        <span class="sb-chip-icon">{% if sig.triggered %}✓{% else %}✗{% endif %}</span>
-                        {{ sig.label }}
-                      </span>
-                      {% endfor %}
-                    </div>
-                  </div>
-
-                  <!-- BAND 2: Fundamental Signal -->
-                  <div class="sb-band sb-band--green">
-                    <div class="sb-band-left">
-                      <span class="sb-band-label">Fundamental</span>
-                      <div class="sb-bar-wrap">
-                        <div class="sb-bar sb-bar--green" style="width:{{ (r.score_fund / 35 * 100)|round|int if r.score_fund is not none else 0 }}%;"></div>
-                      </div>
-                      <span class="sb-band-pts">{{ r.score_fund if r.score_fund is not none else "—" }}<span class="sb-band-max">/35</span></span>
-                    </div>
-                    <div class="sb-band-chips">
-                      {% for sig in r.fund_signals %}
-                      <span class="sb-chip{% if sig.triggered %} sb-chip--on{% else %} sb-chip--off{% endif %}" title="{{ sig.note }} (+{{ sig.pts }} pts)">
-                        <span class="sb-chip-icon">{% if sig.triggered %}✓{% else %}✗{% endif %}</span>
-                        {{ sig.label }}
-                      </span>
-                      {% endfor %}
-                    </div>
-                  </div>
-
-                  <!-- BAND 3: Technical Signal -->
-                  <div class="sb-band sb-band--cyan">
-                    <div class="sb-band-left">
-                      <span class="sb-band-label">Technical</span>
-                      <div class="sb-bar-wrap">
-                        <div class="sb-bar sb-bar--cyan" style="width:{{ (r.score_tech / 30 * 100)|round|int if r.score_tech is not none else 0 }}%;"></div>
-                      </div>
-                      <span class="sb-band-pts">{{ r.score_tech if r.score_tech is not none else "—" }}<span class="sb-band-max">/30</span></span>
-                    </div>
-                    <div class="sb-band-chips">
-                      {% for sig in r.tech_signals %}
-                      <span class="sb-chip{% if sig.triggered %} sb-chip--on{% else %} sb-chip--off{% endif %}" title="{{ sig.note }} (+{{ sig.pts }} pts)">
-                        <span class="sb-chip-icon">{% if sig.triggered %}✓{% else %}✗{% endif %}</span>
-                        {{ sig.label }}
-                        <span class="sb-chip-note">{{ sig.note }}</span>
-                      </span>
-                      {% endfor %}
-                    </div>
-                  </div>
-
-                  <!-- BAND 4: Risk Deductions -->
-                  <div class="sb-band sb-band--risk">
-                    <div class="sb-band-left">
-                      <span class="sb-band-label sb-band-label--risk">Risk adj.</span>
-                      <div class="sb-bar-wrap">
-                        <div class="sb-bar sb-bar--red" style="width:{{ ([0, (r.score_risk|abs / 10 * 100)|round|int]|max) if r.score_risk is not none else 0 }}%;"></div>
-                      </div>
-                      <span class="sb-band-pts sb-band-pts--risk">{%- if r.score_risk and r.score_risk < 0 -%}{{ r.score_risk }}{%- else -%}0{%- endif -%}<span class="sb-band-max">/−10</span></span>
-                    </div>
-                    <div class="sb-band-chips">
-                      {% for sig in r.risk_signals %}
-                      <span class="sb-chip{% if sig.triggered %} sb-chip--risk-hit{% else %} sb-chip--risk-ok{% endif %}" title="{{ sig.note }}">
-                        <span class="sb-chip-icon">{% if sig.triggered %}✗{% else %}✓{% endif %}</span>
-                        {{ sig.label }}
-                        <span class="sb-chip-note">{{ sig.note }}</span>
-                      </span>
-                      {% endfor %}
-                    </div>
-                  </div>
-
-                </div>
-                {% endif %}
-
-                <!-- ── Fundamental snapshot ──────────────────────────── -->
-                {% set has_fund = r.market_cap_cr is not none or r.pe is not none or r.rev_growth_pct is not none or r.pat_growth_pct is not none or r.roce_pct is not none or r.de_ratio is not none %}
-                {% if has_fund %}
-                <div class="fund-snapshot">
-                  <div class="fund-snapshot-title">
-                    <span>Fundamental Snapshot</span>
-                    <span class="fs-note">Source: Screener.in · hover any label for details</span>
-                  </div>
-
-                  <div class="fs-groups">
-
-                    <!-- ── Group 1: Valuation ──────────────────────────── -->
-                    <div class="fs-group">
-                      <span class="fs-group-label">Valuation</span>
-                      <div class="fs-group-items">
-
-                        {% if r.market_cap_cr is not none %}
-                        <div class="fs-item">
-                          <span class="fs-label">Market Cap <span class="fs-tip-wrap"><span class="fs-tip-icon">?</span><span class="fs-tip-box"><strong>Market Capitalisation</strong><span class="tip-body">Total market value of all outstanding shares. Formula: Share Price × Total Shares Outstanding.</span><span class="tip-threshold"><em>Used in scoring:</em> Promoter buy value ÷ Market Cap = conviction %. A buy ≥ 0.25% earns +5 pts.</span></span></span></span>
-                          <span class="fs-val">₹{{ "%.0f"|format(r.market_cap_cr) }} Cr</span>
-                        </div>
-                        {% endif %}
-
-                        {% if r.pe is not none %}
-                        <div class="fs-item">
-                          <span class="fs-label">P/E Ratio <span class="fs-tip-wrap"><span class="fs-tip-icon">?</span><span class="fs-tip-box"><strong>Price-to-Earnings Ratio</strong><span class="tip-body">How many years of current earnings the market is willing to pay for the stock.</span><span class="tip-threshold"><em>Scoring rule:</em> P/E &gt; 60 deducts −3 pts.</span><span class="tip-signals"><span><span class="fs-tip-green">Below 30</span> — reasonably priced</span><span><span class="fs-tip-red">Above 60</span> — elevated valuation risk</span></span></span></span></span>
-                          <span class="fs-val {% if r.pe > 60 %}fs-warn{% endif %}">{{ "%.1f"|format(r.pe) }}×</span>
-                        </div>
-                        {% endif %}
-
-                        {% if r.promo_conviction_pct is not none %}
-                        <div class="fs-item">
-                          <span class="fs-label">Buy / Mkt Cap <span class="fs-tip-wrap"><span class="fs-tip-icon">?</span><span class="fs-tip-box"><strong>Promoter Buy as % of Market Cap</strong><span class="tip-body">Formula: Total ₹ bought ÷ Market Cap × 100. A ₹10 Cr buy in a ₹100 Cr company (1%) is far more meaningful than the same buy in a ₹10,000 Cr company (0.01%).</span><span class="tip-threshold"><em>Scoring rule:</em> ≥ 0.25% earns +5 pts.</span><span class="tip-signals"><span><span class="fs-tip-green">≥ 0.25%</span> — strong conviction</span><span><span class="fs-tip-red">&lt; 0.10%</span> — weak signal</span></span></span></span></span>
-                          <span class="fs-val {% if r.promo_conviction_pct >= 0.25 %}fs-good{% endif %}">{{ "%.3f"|format(r.promo_conviction_pct) }}%</span>
-                        </div>
-                        {% endif %}
-
-                        {% if r.six_month_return is not none %}
-                        <div class="fs-item">
-                          <span class="fs-label">6M Return <span class="fs-tip-wrap"><span class="fs-tip-icon">?</span><span class="fs-tip-box"><strong>6-Month Price Return</strong><span class="tip-body">Stock price change over the last 6 months. Shows medium-term price momentum relative to the period when promoter was buying.</span><span class="tip-threshold"><em>Scoring rule:</em> Positive 6M return earns +5 pts (relative strength signal).</span><span class="tip-signals"><span><span class="fs-tip-green">&gt; 0%</span> — price momentum positive</span><span><span class="fs-tip-red">&lt; 0%</span> — price underperforming</span></span></span></span></span>
-                          <span class="fs-val {% if r.six_month_return > 0 %}fs-good{% elif r.six_month_return < 0 %}fs-warn{% endif %}">{{ "%+.1f"|format(r.six_month_return) }}%</span>
-                        </div>
-                        {% endif %}
-
-                      </div>
-                    </div>
-
-                    <!-- ── Group 2: Growth ─────────────────────────────── -->
-                    <div class="fs-group">
-                      <span class="fs-group-label">Growth (YoY)</span>
-                      <div class="fs-group-items">
-
-                        {% if r.rev_growth_pct is not none %}
-                        <div class="fs-item">
-                          <span class="fs-label">Revenue <span class="fs-tip-wrap"><span class="fs-tip-icon">?</span><span class="fs-tip-box"><strong>Revenue Growth — YoY</strong><span class="tip-body">Year-on-year growth in total sales / revenue from operations.</span><span class="tip-threshold"><em>Scoring rule:</em> &gt; 15% earns +5 pts.</span><span class="tip-signals"><span><span class="fs-tip-green">&gt; 15%</span> — expanding</span><span><span class="fs-tip-red">&lt; 0%</span> — contracting</span></span></span></span></span>
-                          <span class="fs-val {% if r.rev_growth_pct > 15 %}fs-good{% elif r.rev_growth_pct < 0 %}fs-warn{% endif %}">{{ "%.1f"|format(r.rev_growth_pct) }}%</span>
-                        </div>
-                        {% endif %}
-
-                        {% if r.ebitda_growth_pct is not none %}
-                        <div class="fs-item">
-                          <span class="fs-label">EBITDA <span class="fs-tip-wrap"><span class="fs-tip-icon">?</span><span class="fs-tip-box"><strong>EBITDA Growth — YoY</strong><span class="tip-body">Operating profit growth. Growing faster than revenue = margins improving.</span><span class="tip-threshold"><em>Scoring rule:</em> &gt; 15% earns +5 pts.</span><span class="tip-signals"><span><span class="fs-tip-green">&gt; 15%</span> — leverage improving</span><span><span class="fs-tip-red">&lt; 0%</span> — margins under pressure</span></span></span></span></span>
-                          <span class="fs-val {% if r.ebitda_growth_pct > 15 %}fs-good{% elif r.ebitda_growth_pct < 0 %}fs-warn{% endif %}">{{ "%.1f"|format(r.ebitda_growth_pct) }}%</span>
-                        </div>
-                        {% endif %}
-
-                        {% if r.pat_growth_pct is not none %}
-                        <div class="fs-item">
-                          <span class="fs-label">PAT <span class="fs-tip-wrap"><span class="fs-tip-icon">?</span><span class="fs-tip-box"><strong>Profit After Tax Growth — YoY</strong><span class="tip-body">Net profit after all expenses, interest, depreciation and taxes. ⚠ Revenue growth with declining PAT is a red flag.</span><span class="tip-threshold"><em>Scoring rule:</em> &gt; 15% earns +7 pts — highest single fundamental weight.</span><span class="tip-signals"><span><span class="fs-tip-green">&gt; 15%</span> — earnings accelerating</span><span><span class="fs-tip-red">&lt; 0%</span> — earnings declining</span></span></span></span></span>
-                          <span class="fs-val {% if r.pat_growth_pct > 15 %}fs-good{% elif r.pat_growth_pct < 0 %}fs-warn{% endif %}">{{ "%.1f"|format(r.pat_growth_pct) }}%</span>
-                        </div>
-                        {% endif %}
-
-                        {% if r.eps_growth_pct is not none %}
-                        <div class="fs-item">
-                          <span class="fs-label">EPS <span class="fs-tip-wrap"><span class="fs-tip-icon">?</span><span class="fs-tip-box"><strong>Earnings Per Share Growth — YoY</strong><span class="tip-body">Net profit per share. EPS may fall even if PAT grows, if new shares were issued.</span><span class="tip-threshold"><em>Scoring rule:</em> &gt; 15% earns +5 pts.</span><span class="tip-signals"><span><span class="fs-tip-green">&gt; 15%</span> — each share earning more</span><span><span class="fs-tip-red">&lt; 0%</span> — per-share value declining</span></span></span></span></span>
-                          <span class="fs-val {% if r.eps_growth_pct > 15 %}fs-good{% elif r.eps_growth_pct < 0 %}fs-warn{% endif %}">{{ "%.1f"|format(r.eps_growth_pct) }}%</span>
-                        </div>
-                        {% endif %}
-
-                      </div>
-                    </div>
-
-                    <!-- ── Group 3: Efficiency & Risk ─────────────────── -->
-                    <div class="fs-group">
-                      <span class="fs-group-label">Efficiency &amp; Risk</span>
-                      <div class="fs-group-items">
-
-                        {% if r.roce_pct is not none %}
-                        <div class="fs-item">
-                          <span class="fs-label">ROCE <span class="fs-tip-wrap"><span class="fs-tip-icon">?</span><span class="fs-tip-box"><strong>Return on Capital Employed</strong><span class="tip-body">Formula: EBIT ÷ Capital Employed. Measures how efficiently every rupee of capital generates profit.</span><span class="tip-threshold"><em>Scoring rule:</em> &gt; 15% earns +4 pts.</span><span class="tip-signals"><span><span class="fs-tip-green">&gt; 15%</span> — efficient</span><span><span class="fs-tip-red">&lt; 10%</span> — poor returns</span></span></span></span></span>
-                          <span class="fs-val {% if r.roce_pct > 15 %}fs-good{% endif %}">{{ "%.1f"|format(r.roce_pct) }}%</span>
-                        </div>
-                        {% endif %}
-
-                        {% if r.de_ratio is not none %}
-                        <div class="fs-item">
-                          <span class="fs-label">D/E Ratio <span class="fs-tip-wrap"><span class="fs-tip-icon">?</span><span class="fs-tip-box"><strong>Debt-to-Equity Ratio</strong><span class="tip-body">Total Debt ÷ Shareholders' Equity. High debt amplifies both gains and losses.</span><span class="tip-threshold"><em>Scoring rule:</em> &lt; 0.5 earns +3 pts.</span><span class="tip-signals"><span><span class="fs-tip-green">&lt; 0.5</span> — conservatively financed</span><span><span class="fs-tip-red">&gt; 1.0</span> — high leverage</span></span></span></span></span>
-                          <span class="fs-val {% if r.de_ratio < 0.5 %}fs-good{% elif r.de_ratio > 1 %}fs-warn{% endif %}">{{ "%.2f"|format(r.de_ratio) }}</span>
-                        </div>
-                        {% endif %}
-
-                        {% if r.opm_pct is not none %}
-                        <div class="fs-item">
-                          <span class="fs-label">OPM % <span class="fs-tip-wrap"><span class="fs-tip-icon">?</span><span class="fs-tip-box"><strong>Operating Profit Margin</strong><span class="tip-body">Operating Profit ÷ Revenue × 100. Thin margins leave no buffer for cost increases.</span><span class="tip-threshold"><em>Risk deduction:</em> OPM &lt; 5% deducts −2 pts.</span><span class="tip-signals"><span><span class="fs-tip-green">&gt; 15%</span> — healthy margins</span><span><span class="fs-tip-red">&lt; 5%</span> — margin risk</span></span></span></span></span>
-                          <span class="fs-val {% if r.opm_pct < 5 %}fs-warn{% endif %}">{{ "%.1f"|format(r.opm_pct) }}%</span>
-                        </div>
-                        {% endif %}
-
-                        {% if r.ocf_positive is not none %}
-                        <div class="fs-item">
-                          <span class="fs-label">Cash Flow <span class="fs-tip-wrap"><span class="fs-tip-icon">?</span><span class="fs-tip-box"><strong>Operating Cash Flow (OCF)</strong><span class="tip-body">Cash from core operations. ⚠ Accounting profit can be manipulated; cash flow cannot.</span><span class="tip-threshold"><em>Scoring rule:</em> Positive OCF earns +6 pts — highest single fundamental weight.</span><span class="tip-signals"><span><span class="fs-tip-green">Positive</span> — real cash generation</span><span><span class="fs-tip-red">Negative</span> — burning cash</span></span></span></span></span>
-                          <span class="fs-val {% if r.ocf_positive %}fs-good{% else %}fs-warn{% endif %}">{{ "Positive" if r.ocf_positive else "Negative" }}</span>
-                        </div>
-                        {% endif %}
-
-                      </div>
-                    </div>
-
-                  </div><!-- /fs-groups -->
-                </div>
-                {% endif %}
-
-                <!-- ── Promoter trade transactions ───────────────────── -->
-                <div class="trades-drawer-header">
-                  <span class="trades-drawer-title">Promoter buying transactions —
-                    <a href="https://www.screener.in/company/{{ r.symbol }}/consolidated/"
-                       target="_blank" rel="noopener noreferrer"
-                       class="drawer-sym-link"
-                       title="View {{ r.symbol }} on Screener.in">{{ r.symbol }}
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                    </a>
-                  </span>
-                  <span class="trades-drawer-count">{{ r.trades|length }} transaction{{ 's' if r.trades|length != 1 }}</span>
-                </div>
-                <div class="trades-table-wrap">
-                  <table class="trades-table">
-                    <thead>
-                      <tr>
-                        <th>Buyer Name</th>
-                        <th>Category</th>
-                        <th>Qty Acquired</th>
-                        <th>Value (&#8377;)</th>
-                        <th>Post-Trade Hold%</th>
-                        <th>Date</th>
-                        <th>NSE Filing</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {% for t in r.trades %}
-                      <tr>
-                        <td class="tt-name">{{ t.get("Name of Person", "—") }}</td>
-                        <td class="tt-cat">{{ t.get("Category of Person", "—") }}</td>
-                        <td class="tt-num">{{ t.get("Securities Acquired/Disposed (No.)", "—") }}</td>
-                        <td class="tt-num">&#8377;{{ t.get("Securities Acquired/Disposed (Value)", "—") }}</td>
-                        <td class="tt-num">{{ t.get("Securities Held Post (%)", "—") }}</td>
-                        <td class="tt-date">{{ t.get("Date To", t.get("Date From", "—")) }}</td>
-                        <td class="tt-link">
-                          {% if t.get("Details URL") %}
-                          <a href="{{ t['Details URL'] }}" target="_blank" rel="noopener noreferrer"
-                             class="filing-link" aria-label="View NSE XBRL filing (opens in new tab)">
-                            View filing
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                          </a>
-                          {% else %}—{% endif %}
-                        </td>
-                      </tr>
-                      {% endfor %}
-                    </tbody>
-                  </table>
-                </div>
-
-              </div>
-            </td>
-          </tr>
-          {% endif %}
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    <p class="table-footer-note" id="shortlist-count-note" aria-live="polite"></p>
-    {% else %}
-    <div class="empty-state">
-      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="8" y1="15" x2="16" y2="15"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-      <p>No shortlisted stocks found for this scan. The pipeline may not have completed Phase 2 enrichment.</p>
-    </div>
-    {% endif %}
-  </div>
-
-  <!-- ── All Candidates Panel ───────────────────────────────────────────── -->
-  <div id="panel-candidates" role="tabpanel" aria-labelledby="tab-candidates" hidden>
-    {% if candidate_rows %}
-    <div class="table-controls">
-      <div class="search-wrap">
-        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="search" id="search-candidates" class="search-input" placeholder="Search symbol or company…" aria-label="Search all candidates" />
-      </div>
-    </div>
-    <p class="table-note">All symbols assessed in this report, including those that did not meet all shortlisting criteria.</p>
-    <div class="table-wrap">
-      <table class="data-table" id="table-candidates" aria-label="All candidate stocks">
-        <thead>
-          <tr>
-            <th class="th-sort col-symbol"   data-col="symbol"         tabindex="0" role="columnheader" aria-sort="none">Symbol <span class="sort-icon" aria-hidden="true"></span></th>
-            <th class="th-sort col-score"    data-col="score"          tabindex="0" role="columnheader" aria-sort="none">Score <span class="sort-icon" aria-hidden="true"></span></th>
-            <th class="col-cat-dot" title="Category">Cat</th>
-            <th class="th-sort col-cmp"      data-col="last_price"     tabindex="0" role="columnheader" aria-sort="none">CMP (&#8377;) <span class="sort-icon" aria-hidden="true"></span></th>
-            <th class="th-sort col-ref"      data-col="avg_price"      tabindex="0" role="columnheader" aria-sort="none">Ref (&#8377;) <span class="sort-icon" aria-hidden="true"></span></th>
-            <th class="th-sort col-delta"    data-col="price_diff_pct" tabindex="0" role="columnheader" aria-sort="none">Δ% <span class="sort-icon" aria-hidden="true"></span></th>
-            <th class="th-sort col-hold"     data-col="promo_holding"  tabindex="0" role="columnheader" aria-sort="none">Hold% <span class="sort-icon" aria-hidden="true"></span></th>
-            <th class="th-sort col-value"    data-col="value_cr"       tabindex="0" role="columnheader" aria-sort="none">&#8377;Cr <span class="sort-icon" aria-hidden="true"></span></th>
-            <th class="th-sort col-txn"      data-col="num_buy_txn"    tabindex="0" role="columnheader" aria-sort="none">#Txn <span class="sort-icon" aria-hidden="true"></span></th>
-            <th class="th-sort col-date"     data-col="acq_to_dt"      tabindex="0" role="columnheader" aria-sort="none">Date <span class="sort-icon" aria-hidden="true"></span></th>
-            <th class="col-flag">Pledge</th>
-            <th class="col-flag">Sell</th>
-          </tr>
-        </thead>
-        <tbody id="tbody-candidates">
-          {% for r in candidate_rows %}
-          <tr data-symbol="{{ r.symbol }}" data-company="{{ r.company|lower }}" data-row-index="{{ loop.index0 }}">
-            <td class="td-symbol">
-              <span class="symbol-wrap" data-company="{{ r.company }}">
-                <a href="https://www.nseindia.com/get-quotes/equity?symbol={{ r.symbol }}"
-                   target="_blank" rel="noopener noreferrer" class="symbol-link"
-                   aria-label="{{ r.symbol }} — {{ r.company }} on NSE (opens in new tab)">
-                  {{ r.symbol }}
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                </a>
-                <span class="company-tooltip">{{ r.company }}</span>
-              </span>
-            </td>
-            <td class="td-num td-score">
-              {% if r.score is not none %}
-              <div class="score-meter">
-                <span class="score-value {% if r.score >= 65 %}score-high{% elif r.score >= 50 %}score-mid{% elif r.score >= 40 %}score-ok{% else %}score-low{% endif %}">{{ r.score }}</span>
-                <div class="score-bar-track" aria-hidden="true">
-                  <div class="score-bar-fill {% if r.score >= 65 %}score-bar--high{% elif r.score >= 50 %}score-bar--mid{% elif r.score >= 40 %}score-bar--ok{% else %}score-bar--low{% endif %}"
-                       style="width:{{ r.score }}%"></div>
-                </div>
-              </div>
-              {% else %}—{% endif %}
-            </td>
-            <td class="td-cat-dot" title="{{ r.category }}">
-              <span class="cat-dot cat-dot--{{ r.category_css }}" aria-label="{{ r.category }}"></span>
-            </td>
-            <td class="td-num">&#8377;{{ "%.2f"|format(r.last_price) if r.last_price is not none else "—" }}</td>
-            <td class="td-num">&#8377;{{ "%.2f"|format(r.avg_price) if r.avg_price is not none else "—" }}</td>
-            <td class="td-num td-diff {% if r.price_diff_pct < 0 %}diff-neg{% elif r.price_diff_pct > 0 %}diff-pos{% endif %}">
-              {% if r.price_diff_pct < 0 %}
-                <span class="diff-badge diff-badge--neg">{{ "%.1f"|format(r.price_diff_pct) }}%</span>
-              {% else %}
-                <span class="diff-badge diff-badge--pos">+{{ "%.1f"|format(r.price_diff_pct) }}%</span>
-              {% endif %}
-            </td>
-            <td class="td-num">{{ "%.2f"|format(r.promo_holding) if r.promo_holding is not none else "—" }}%</td>
-            <td class="td-num">&#8377;{{ "%.2f"|format(r.value_cr) if r.value_cr is not none else "—" }}</td>
-            <td class="td-num">{{ r.num_buy_txn }}</td>
-            <td class="td-date">{{ r.acq_to_dt }}</td>
-            <td class="td-flag">
-              {% if r.has_pledging %}
-                <span class="flag flag--red" aria-label="Flag A raised">Yes</span>
-              {% else %}
-                <span class="flag flag--green" aria-label="Flag A clear">No</span>
-              {% endif %}
-            </td>
-            <td class="td-flag">
-              {% if r.has_sell %}
-                <span class="flag flag--red" aria-label="Flag B raised">Yes</span>
-              {% else %}
-                <span class="flag flag--green" aria-label="Flag B clear">No</span>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    <p class="table-footer-note" id="candidates-count-note" aria-live="polite"></p>
-    {% else %}
-    <div class="empty-state">
-      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      <p>No candidate data found for this report date.</p>
-    </div>
-    {% endif %}
-  </div>
+  </section>
 </div>
-
-<script id="data-shortlist" type="application/json">{{ filtered_json | safe }}</script>
-<script id="data-candidates" type="application/json">{{ candidate_json | safe }}</script>
-{# _row_index is injected into each row dict by the app so scan.js can do
-   position-based DOM matching rather than symbol-based (handles duplicates) #}
 {% endblock %}
 
 {% block scripts %}
