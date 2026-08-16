@@ -7,7 +7,7 @@ import json
 import logging
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -115,10 +115,21 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     except Exception:
         pass
 
+    failed_path = run_dir / "failed_urls.txt"
+    failed_urls = 0
+    if failed_path.exists():
+        try:
+            failed_urls = max(0, len(failed_path.read_text(encoding="utf-8").splitlines()) - 1)
+        except Exception:
+            failed_urls = 0
+
     meta = {
         "run_date"      : date_str,
+        "generated_at"  : datetime.now(timezone.utc).isoformat(),
+        "status"        : "success",
         "filing_period" : NSE_FILING_PERIOD,
         "raw_filings"   : raw_count,
+        "failed_urls"   : failed_urls,
         "candidates"    : candidates,
         "shortlisted"   : len(final),
         "duration_s"    : duration,
