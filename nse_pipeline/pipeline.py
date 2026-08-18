@@ -92,8 +92,15 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
         ctx = browser.new_context(user_agent=USER_AGENT)
 
         raw_count = 0
+
         if skip_phase1 and csv_path.exists():
             log.info("--skip-phase1: reusing %s", csv_path)
+            try:
+                raw_count = len(pd.read_csv(csv_path, encoding="utf-8-sig"))
+                log.info("Reused existing NSE snapshot: %d rows", raw_count)
+            except Exception as exc:
+                log.error("Could not read existing NSE snapshot: %s", exc)
+                raw_count = 0
         else:
             raw_count = scraper.run(ctx, csv_path)
 
@@ -135,7 +142,8 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
 
     # Phase 2 — analyse
     # Phase 2 — analyse (prices from Bhavcopy; no browser needed)
-    final = analyzer.run(csv_path, full_csv)
+    as_of = datetime.strptime(date_str, "%Y-%m-%d").date()
+    final = analyzer.run(csv_path, full_csv, as_of_date=as_of)
 
     # Phase 3 — report + export
     reporter.run(final, excel_path)

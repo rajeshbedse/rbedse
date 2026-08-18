@@ -3,7 +3,7 @@ Phase 2 — Filter, Enrich, Fetch Prices, Holdings, Fundamentals & Score
 
 Applies:
   Filter B  No Pledge Creation / Invocation by Promoter/PG
-  Filter C  No Market Sale by Promoter/PG
+  Filter C  Promoter market selling <= 25% of promoter market buying
   Filter A  Promoter holding >= MIN_PROMO_HOLDING (from Screener.in)
 
 Prices are fetched from the NSE Bhavcopy daily CSV
@@ -50,7 +50,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from .config import (
-    MIN_PURCHASE_VALUE, MIN_PROMO_HOLDING,
+    MIN_PURCHASE_VALUE, MIN_PROMO_HOLDING, MAX_SELL_BUY_RATIO_PCT,
     PROMOTER_CATEGORIES, PLEDGE_MODES,
     HOLDING_FETCH_DELAY, HOLDING_RETRY_COUNT,
     HOLDING_WORKERS, USER_AGENT,
@@ -87,6 +87,128 @@ _SCREENER_HEADERS = {
 _BHAVCOPY_SERIES = {"EQ", "BE", "BZ"}
 
 
+# Transaction identity used to protect all downstream promoter aggregation
+# from repeated NSE filings for the same economic transaction.  We deliberately
+# do NOT include holding-prior/post in this identity because NSE can re-file or
+# correct the same transaction with corrected holding balances.  Those fields
+# are still retained in the raw data for audit purposes.  A transaction that is
+# genuinely repeated inside the SAME filing (e.g. two sequential 1,000-share
+# purchases on the same day) is preserved by _deduplicate_transactions().
+_TRANSACTION_CORE_COLUMNS = [
+    "Symbol",
+    "Name of Person",
+    "CIN/DIN",
+    "Type of Instrument",
+    "Securities Acquired/Disposed (No.)",
+    "Securities Acquired/Disposed (Value)",
+    "Transaction Type",
+    "Date From",
+    "Date To",
+    "Mode of Acquisition/Disposal",
+]
+
+
+def _normalise_key_value(value) -> str:
+    """Normalise a raw NSE field for transaction identity comparison."""
+    if pd.isna(value):
+        return ""
+    return " ".join(str(value).strip().upper().split())
+
+
+def _deduplicate_transactions(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """
+    Remove repeated NSE filings for the same economic transaction.
+
+    NSE can expose the same transaction through more than one filing URL
+    (typically an original/re-filed/corrected disclosure).  Counting both
+    rows would double promoter purchase value, quantity and transaction count.
+
+    Important: identical transactions within the SAME filing URL are retained
+    because a filing can legitimately contain sequential transactions by the
+    same person on the same date.  The current dataset contains such a case
+    (e.g. two consecutive purchases where the held-prior/post balances prove
+    they are separate events).
+
+    For the same transaction appearing across multiple filing URLs, the rows
+    belonging to the latest broadcast filing are retained.  This also handles
+    corrected filings where the holding-prior/post values changed while the
+    economic transaction itself remained the same.
+
+    Returns
+    -------
+    (deduplicated_dataframe, number_of_rows_removed)
+    """
+    if df.empty:
+        return df.copy(), 0
+
+    work = df.copy()
+    work.columns = work.columns.str.strip()
+
+    # First remove literal duplicate transaction rows from the same filing.
+    exact_cols = [
+        c for c in ["Details URL", *_TRANSACTION_CORE_COLUMNS,
+                    "Securities Held Prior (No.)", "Securities Held Prior (%)",
+                    "Securities Held Post (No.)", "Securities Held Post (%)",
+                    "Date From", "Date To", "Date of Intimation"]
+        if c in work.columns
+    ]
+    before = len(work)
+    if exact_cols:
+        work = work.drop_duplicates(subset=exact_cols, keep="last").copy()
+
+    # Build a normalised economic-transaction key.  Details URL is deliberately
+    # excluded so that duplicate/re-filed disclosures can be recognised.
+    key_cols = [c for c in _TRANSACTION_CORE_COLUMNS if c in work.columns]
+    for col in key_cols:
+        work[f"__txn_{col}"] = work[col].map(_normalise_key_value)
+
+    work["__txn_core_key"] = work[
+        [f"__txn_{c}" for c in key_cols]
+    ].agg("|".join, axis=1)
+
+    work["__broadcast_dt"] = pd.to_datetime(
+        work.get("Broadcast Date/Time", ""), errors="coerce", dayfirst=True
+    )
+
+    # For each economic transaction, retain the latest filing's rows.  Keeping
+    # all rows from that latest filing preserves legitimate sequential rows in
+    # the same disclosure.  If two filings have the same broadcast timestamp,
+    # use the URL as a deterministic tie-breaker.
+    if "Details URL" in work.columns:
+        filing_meta = (
+            work[["__txn_core_key", "Details URL", "__broadcast_dt"]]
+            .drop_duplicates()
+            .sort_values(
+                ["__txn_core_key", "__broadcast_dt", "Details URL"],
+                na_position="first",
+            )
+        )
+        latest_filing = (
+            filing_meta.groupby("__txn_core_key", dropna=False, as_index=False)
+            .tail(1)[["__txn_core_key", "Details URL"]]
+        )
+        work = work.merge(
+            latest_filing.assign(__keep=True),
+            on=["__txn_core_key", "Details URL"],
+            how="inner",
+        )
+        work = work.drop(columns=["__keep"])
+    else:
+        latest = work.groupby("__txn_core_key", dropna=False)["__broadcast_dt"].transform("max")
+        work = work[
+            work["__broadcast_dt"].eq(latest) | work["__broadcast_dt"].isna()
+        ].copy()
+
+    helper_cols = [
+        c for c in work.columns
+        if c.startswith("__txn_") or c == "__broadcast_dt"
+    ]
+    work = work.drop(columns=helper_cols, errors="ignore")
+
+    removed = before - len(work)
+    return work.reset_index(drop=True), removed
+
+
 # ── Parsing helpers ───────────────────────────────────────────────────────────
 def _v(raw) -> float:
     """Parse a money string like '22,398,800.00' → float."""
@@ -97,22 +219,45 @@ def _q(raw) -> float:
     return float(re.sub(r"[^\d.]", "", str(raw)) or 0)
 
 
+def _is_equity_instrument(series: pd.Series) -> pd.Series:
+    """Return True only for NSE equity-instrument rows used by the equity strategy."""
+    return (
+        series.fillna("")
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .eq("equity")
+    )
+
+
 def _build_aggregates(csv_path: Path) -> tuple[pd.DataFrame, set, set]:
     """
     Load CSV, build per-symbol aggregates for promoter market buys,
     and derive the pledge / market-sell exclusion sets.
 
-    Returns (agg_filtered, pledge_syms, sell_syms)
+    Returns (aggregates, pledge_syms, sell_exclusion_syms)
     """
     df = pd.read_csv(csv_path, encoding="utf-8-sig", dtype=str)
     df.columns = df.columns.str.strip()
+
+    # NSE can expose the same economic transaction through multiple filing
+    # URLs.  Deduplicate BEFORE any aggregation or exclusion-set calculation
+    # so value, quantity and transaction counts are not inflated.
+    df, duplicate_rows_removed = _deduplicate_transactions(df)
+    log.info(
+        "Transaction de-duplication: removed %d repeated filing row(s)",
+        duplicate_rows_removed,
+    )
 
     df_promo = df[
         df["Category of Person"].str.strip().str.lower().isin(PROMOTER_CATEGORIES)
     ].copy()
 
-    # Aggregation source: promoter Market Purchase buys only
+    # Aggregation source: promoter Market Purchase buys in EQUITY only.
+    # Non-equity instruments (debentures, warrants, derivatives, etc.) remain
+    # in the raw audit dataset but must not affect the equity accumulation signal.
     df_buys = df_promo[
+        _is_equity_instrument(df_promo["Type of Instrument"]) &
         (df_promo["Transaction Type"].str.strip().str.lower() == "buy") &
         (df_promo["Mode of Acquisition/Disposal"].str.strip().str.lower() == "market purchase")
     ].copy()
@@ -123,26 +268,50 @@ def _build_aggregates(csv_path: Path) -> tuple[pd.DataFrame, set, set]:
         df_buys["Date To"].str.strip(), format="%d-%m-%Y", errors="coerce"
     )
 
+    # A reported market-purchase row can occasionally contain zero/missing
+    # transaction value.  It remains part of the audit trail, but cannot
+    # contribute to a monetary weighted-average purchase price.
+    df_buys["_priced"] = (df_buys["_value"] > 0) & (df_buys["_qty"] > 0)
+
     agg = df_buys.groupby("Symbol").agg(
-        CompanyName   = ("Company Name", "first"),
-        ValuePurchased= ("_value", "sum"),
-        TotalQty      = ("_qty",   "sum"),
-        NumBuyTxn     = ("_value", "count"),
-        acqtoDt       = ("_date",  "max"),
+        CompanyName      = ("Company Name", "first"),
+        ValuePurchased   = ("_value", "sum"),
+        ReportedBuyQty   = ("_qty", "sum"),
+        ReportedBuyTxn   = ("_value", "count"),
+        acqtoDt          = ("_date",  "max"),
     ).reset_index()
 
+    priced = df_buys[df_buys["_priced"]].groupby("Symbol").agg(
+        TotalQty  = ("_qty", "sum"),
+        NumBuyTxn = ("_value", "count"),
+    ).reset_index()
+
+    priced_value = df_buys[df_buys["_priced"]].groupby("Symbol")["_value"].sum()
+    agg["TotalQty"] = agg["Symbol"].map(priced.set_index("Symbol")["TotalQty"])
+    agg["NumBuyTxn"] = agg["Symbol"].map(priced.set_index("Symbol")["NumBuyTxn"]).fillna(0).astype(int)
+    agg["PricedValuePurchased"] = agg["Symbol"].map(priced_value).fillna(0.0)
+    # Keep ValuePurchased for backward compatibility, but make it the same
+    # priceable monetary total used by AvgPrice, ValueCr and the ₹20L gate.
+    agg["ValuePurchased"] = agg["PricedValuePurchased"]
+
     agg["AvgPrice"] = (
-        agg["ValuePurchased"] / agg["TotalQty"].replace(0, float("nan"))
+        agg["PricedValuePurchased"] / agg["TotalQty"].replace(0, float("nan"))
     ).round(2)
+    agg["MissingValueQty"] = (
+        agg["ReportedBuyQty"] - agg["TotalQty"].fillna(0)
+    ).round(4)
+    agg["MissingValueTxn"] = (
+        agg["ReportedBuyTxn"] - agg["NumBuyTxn"]
+    ).astype(int)
     agg["acqtoDt"] = agg["acqtoDt"].dt.strftime("%d-%m-%Y")
-    agg["ValueCr"] = (agg["ValuePurchased"] / 1e7).round(2)
+    agg["ValueCr"] = (agg["PricedValuePurchased"] / 1e7).round(2)
 
     # ≥ ₹20L gate
-    agg = agg[agg["ValuePurchased"] >= MIN_PURCHASE_VALUE] \
-            .sort_values("ValuePurchased", ascending=False) \
+    agg = agg[agg["PricedValuePurchased"] >= MIN_PURCHASE_VALUE] \
+            .sort_values("PricedValuePurchased", ascending=False) \
             .reset_index(drop=True)
 
-    log.info("Base symbols ≥₹%.0fL: %d", MIN_PURCHASE_VALUE / 1e5, len(agg))
+    log.info("Base symbols with priced buys ≥₹%.0fL: %d", MIN_PURCHASE_VALUE / 1e5, len(agg))
 
     # Pledge exclusion set
     pledge_syms = set(
@@ -151,12 +320,36 @@ def _build_aggregates(csv_path: Path) -> tuple[pd.DataFrame, set, set]:
         ]["Symbol"].str.strip().str.upper()
     )
 
-    # Market-sell exclusion set
+    # Promoter market sells are analysed against promoter market buys rather
+    # than treated as an automatic exclusion. A stock remains eligible when
+    # promoter selling is <= 25% of promoter buying by reported consideration.
+    # This is intentionally a hard cutoff for the promoter-accumulation
+    # strategy: >25% means the buying signal is materially contradicted.
+    df_sells = df_promo[
+        _is_equity_instrument(df_promo["Type of Instrument"]) &
+        (df_promo["Transaction Type"].str.strip().str.lower() == "sell") &
+        (df_promo["Mode of Acquisition/Disposal"].str.strip().str.lower() == "market sale")
+    ].copy()
+    df_sells["_value"] = df_sells["Securities Acquired/Disposed (Value)"].apply(_v)
+    df_sells["_qty"] = df_sells["Securities Acquired/Disposed (No.)"].apply(_q)
+    df_sells["_priced"] = (df_sells["_value"] > 0) & (df_sells["_qty"] > 0)
+
+    sell_values = df_sells[df_sells["_priced"]].groupby("Symbol")["_value"].sum()
+    buy_values = agg.set_index("Symbol")["PricedValuePurchased"]
+
+    agg["MarketBuyValue"] = agg["Symbol"].map(buy_values).fillna(0.0)
+    agg["MarketSellValue"] = agg["Symbol"].map(sell_values).fillna(0.0)
+    agg["NetBuyValue"] = agg["MarketBuyValue"] - agg["MarketSellValue"]
+    agg["SellBuyRatioPct"] = (
+        agg["MarketSellValue"] / agg["MarketBuyValue"].replace(0, float("nan")) * 100
+    ).round(2)
+    agg["HasMarketSell"] = agg["MarketSellValue"] > 0
+    agg["SellBuyExclusion"] = agg["SellBuyRatioPct"] > MAX_SELL_BUY_RATIO_PCT
+
+    # Keep the complete transaction history for auditability, but expose the
+    # symbols that fail the promoter-selling rule as the exclusion set.
     sell_syms = set(
-        df_promo[
-            (df_promo["Transaction Type"].str.strip().str.lower() == "sell") &
-            (df_promo["Mode of Acquisition/Disposal"].str.strip().str.lower() == "market sale")
-        ]["Symbol"].str.strip().str.upper()
+        agg.loc[agg["SellBuyExclusion"], "Symbol"].astype(str).str.strip().str.upper()
     )
 
     return agg, pledge_syms, sell_syms
@@ -174,7 +367,7 @@ _BHAVCOPY_HEADERS = {
 }
 
 
-def _download_bhavcopy(max_lookback: int = 5) -> dict[str, float] | None:
+def _download_bhavcopy(max_lookback: int = 5, as_of_date: date | None = None) -> dict[str, float] | None:
     """
     Download the most recent Bhavcopy daily CSV and return a dict
     {SYMBOL -> LastPrice} for all EQ/BE/BZ-series equities.
@@ -188,7 +381,7 @@ def _download_bhavcopy(max_lookback: int = 5) -> dict[str, float] | None:
     session = requests.Session()
     session.headers.update(_BHAVCOPY_HEADERS)
 
-    today = date.today()
+    today = as_of_date or date.today()
     attempted: list[str] = []
 
     for delta in range(max_lookback + 1):
@@ -230,13 +423,13 @@ def _download_bhavcopy(max_lookback: int = 5) -> dict[str, float] | None:
     return None
 
 
-def _fetch_prices(symbols: list[str]) -> dict[str, float | None]:
+def _fetch_prices(symbols: list[str], as_of_date: date | None = None) -> dict[str, float | None]:
     """
     Resolve last traded prices for *symbols* from the Bhavcopy daily CSV.
     Downloads the file once; all symbol lookups are done in-memory.
     No browser, no cookies, no per-symbol HTTP request.
     """
-    bhavcopy = _download_bhavcopy()
+    bhavcopy = _download_bhavcopy(as_of_date=as_of_date)
     prices: dict[str, float | None] = {}
 
     for sym in symbols:
@@ -294,7 +487,7 @@ def _fetch_one_bhavcopy(args: tuple) -> dict[str, float] | None:
         return None
 
 
-def _fetch_dma(symbols: list[str], lookback_days: int = _DMA_LOOKBACK) -> dict[str, dict]:
+def _fetch_dma(symbols: list[str], lookback_days: int = _DMA_LOOKBACK, as_of_date: date | None = None) -> dict[str, dict]:
     """
     Download the last ~200 trading days of Bhavcopy files in parallel and
     compute 50-day DMA, 200-day DMA, and 6-month return for each symbol.
@@ -320,7 +513,7 @@ def _fetch_dma(symbols: list[str], lookback_days: int = _DMA_LOOKBACK) -> dict[s
     roughly 2–3 seconds with 8 parallel workers.
     """
     sym_set = set(symbols)
-    today   = date.today()
+    today   = as_of_date or date.today()
 
     # Build candidate (date_str, url) list — newest first
     candidates: list[tuple[str, str]] = []
@@ -671,7 +864,7 @@ def _score_row(row: pd.Series, fund: dict) -> tuple[int, int, int, int, int, str
     ----------
     row : pd.Series
         A row from the enriched DataFrame (must have AvgPrice, LastPrice,
-        PromoHolding, ValueCr, NumBuyTxn, HasPledging, HasMarketSell).
+        PromoHolding, ValueCr, NumBuyTxn, HasPledging, HasMarketSell, SellBuyRatioPct).
     fund : dict
         Fundamentals dict from _parse_fundamentals_html (may be empty {}).
 
@@ -860,32 +1053,42 @@ def _save_promoter_trades(csv_path: Path, candidate_syms: set, out_path: Path) -
     """
     _TRADE_COLS = [
         "Symbol", "Company Name",
-        "Name of Person", "Category of Person",
+        "Name of Person", "CIN/DIN", "Category of Person",
+        "Type of Instrument",
+        "Securities Held Prior (No.)", "Securities Held Prior (%)",
         "Securities Acquired/Disposed (No.)",
         "Securities Acquired/Disposed (Value)",
-        "Securities Held Post (%)",
+        "Transaction Type",
+        "Securities Held Post (No.)", "Securities Held Post (%)",
         "Date From", "Date To",
+        "Mode of Acquisition/Disposal",
+        "Broadcast Date/Time",
         "Details URL",
     ]
     try:
         df = pd.read_csv(csv_path, encoding="utf-8-sig", dtype=str)
         df.columns = df.columns.str.strip()
+        df, duplicate_rows_removed = _deduplicate_transactions(df)
         mask = (
             df["Symbol"].isin(candidate_syms) &
+            _is_equity_instrument(df["Type of Instrument"]) &
             (df["Transaction Type"].str.strip().str.lower() == "buy") &
             (df["Mode of Acquisition/Disposal"].str.strip().str.lower() == "market purchase") &
             df["Category of Person"].str.strip().str.lower().isin(PROMOTER_CATEGORIES)
         )
         trades = df.loc[mask, [c for c in _TRADE_COLS if c in df.columns]].copy()
         trades.to_csv(out_path, index=False, encoding="utf-8-sig")
-        log.info("Promoter trades → %s (%d rows)", out_path, len(trades))
+        log.info(
+            "Promoter trades → %s (%d rows; %d repeated filing row(s) removed)",
+            out_path, len(trades), duplicate_rows_removed,
+        )
     except Exception as exc:
         log.warning("Could not save promoter trades: %s", exc)
 
 
 # ── Phase 2 entry point ───────────────────────────────────────────────────────
 
-def run(csv_path: Path, full_csv_path: Path) -> pd.DataFrame:
+def run(csv_path: Path, full_csv_path: Path, as_of_date: date | None = None) -> pd.DataFrame:
     """
     Run Phase 2.  Returns the final filtered + enriched + scored DataFrame.
     Also writes:
@@ -903,12 +1106,16 @@ def run(csv_path: Path, full_csv_path: Path) -> pd.DataFrame:
     agg, pledge_syms, sell_syms = _build_aggregates(csv_path)
 
     log.info("Pledging symbols excluded (%d): %s", len(pledge_syms), sorted(pledge_syms))
-    log.info("Market-sell symbols excluded (%d): %s", len(sell_syms), sorted(sell_syms))
+    log.info(
+        "Promoter sell >25%% of buy excluded (%d): %s",
+        len(sell_syms), sorted(sell_syms),
+    )
 
-    agg["HasPledging"]   = agg["Symbol"].isin(pledge_syms)
-    agg["HasMarketSell"] = agg["Symbol"].isin(sell_syms)
-    agg_clean = agg[~agg["HasPledging"] & ~agg["HasMarketSell"]].reset_index(drop=True)
-    log.info("After pledge + sell filter: %d symbols", len(agg_clean))
+    agg["HasPledging"] = agg["Symbol"].isin(pledge_syms)
+    # HasMarketSell remains an audit/UI flag for ANY valid promoter market sale;
+    # exclusion is controlled separately by SellBuyExclusion.
+    agg_clean = agg[~agg["HasPledging"] & ~agg["SellBuyExclusion"]].reset_index(drop=True)
+    log.info("After pledge + promoter sell-ratio filter: %d symbols", len(agg_clean))
 
     symbols = agg_clean["Symbol"].tolist()
 
@@ -919,10 +1126,10 @@ def run(csv_path: Path, full_csv_path: Path) -> pd.DataFrame:
     )
 
     log.info("Fetching prices (%d symbols) from NSE Bhavcopy …", len(symbols))
-    prices = _fetch_prices(symbols)
+    prices = _fetch_prices(symbols, as_of_date=as_of_date)
 
     log.info("Computing DMA50 / DMA200 / 6M return from NSE Bhavcopy history …")
-    dma_data = _fetch_dma(symbols)
+    dma_data = _fetch_dma(symbols, as_of_date=as_of_date)
 
     log.info("Fetching holdings + fundamentals (%d symbols) from Screener.in …", len(symbols))
     screener_data = _fetch_screener_data(symbols)

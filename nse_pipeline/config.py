@@ -5,6 +5,7 @@ from pathlib import Path
 
 # ── Analysis thresholds ───────────────────────────────────────────────────────
 MIN_PURCHASE_VALUE   = 2_000_000   # ₹ — minimum total promoter buy value per symbol
+MAX_SELL_BUY_RATIO_PCT = 25.0       # hard exclusion if promoter market sells exceed 25% of market buys
 MIN_PROMO_HOLDING    = 60.0        # % — minimum latest-quarter promoter shareholding
 PRICE_PROXIMITY_BANDS = [10, 20, 30]  # % bands for proximity report
 
