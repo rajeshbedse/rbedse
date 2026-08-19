@@ -283,11 +283,39 @@ def _cached_trades(path_str: str, _mtime: float) -> dict | None:
     try:
         df = pd.read_csv(path_str, encoding="utf-8-sig", dtype=str).fillna("")
         df.columns = df.columns.str.strip()
+
+        # Always expose the most recent promoter transaction first.
+        # Prefer Date To; fall back to Date From when Date To is unavailable.
+        date_col = "__transaction_date"
+        date_to = (
+            pd.to_datetime(df.get("Date To", ""), format="%d-%m-%Y", errors="coerce")
+            if "Date To" in df.columns
+            else pd.Series(pd.NaT, index=df.index)
+        )
+        date_from = (
+            pd.to_datetime(df.get("Date From", ""), format="%d-%m-%Y", errors="coerce")
+            if "Date From" in df.columns
+            else pd.Series(pd.NaT, index=df.index)
+        )
+
+        df[date_col] = date_to.fillna(date_from)
+
+        # Stable descending sort: transactions with the latest date appear first,
+        # while transactions on the same date retain their original CSV order.
+        df = df.sort_values(
+            by=date_col,
+            ascending=False,
+            na_position="last",
+            kind="stable",
+        )
+
         trades: dict[str, list] = {}
         for r in df.to_dict(orient="records"):
             sym = r.get("Symbol", "").strip()
             if sym:
+                r.pop(date_col, None)
                 trades.setdefault(sym, []).append(r)
+
         return trades
     except Exception as e:
         log.warning("Could not read trades %s: %s", path_str, e)
@@ -625,6 +653,16 @@ def _df_to_rows(df: pd.DataFrame, include_flags: bool = False) -> list[dict]:
             "promo_holding"      : _clean(r.get("PromoHolding")),
             "value_cr"           : _clean(r.get("ValueCr")),
             "num_buy_txn"        : r.get("NumBuyTxn"),
+            "reported_buy_txn"       : r.get("ReportedBuyTxn"),
+            "priced_value_purchased" : _clean(r.get("PricedValuePurchased")),
+            "missing_value_qty"      : _clean(r.get("MissingValueQty")),
+            "missing_value_txn"      : r.get("MissingValueTxn"),
+            "market_buy_value"       : _clean(r.get("MarketBuyValue")),
+            "market_sell_value"      : _clean(r.get("MarketSellValue")),
+            "net_buy_value"          : _clean(r.get("NetBuyValue")),
+            "sell_buy_ratio_pct"     : _clean(r.get("SellBuyRatioPct")),
+            "has_market_sell"        : bool(r.get("HasMarketSell", False)),
+            "sell_buy_exclusion"     : bool(r.get("SellBuyExclusion", False)),
             "acq_to_dt"          : r.get("acqtoDt", ""),
             "band"               : _band_label(pct),
             # scoring
@@ -862,16 +900,54 @@ def scan_stock_detail(date_str: str, symbol: str):
         abort(404)
 
     df = _load_filtered(date_str)
-    if df is None or df.empty or "Symbol" not in df.columns:
-        df = _load_full(date_str)
-    if df is None or df.empty:
-        abort(404)
 
-    matches = df[df["Symbol"].astype(str).str.upper() == symbol]
+    if df is not None and not df.empty and "Symbol" in df.columns:
+        matches = df[df["Symbol"].astype(str).str.upper() == symbol]
+    else:
+        matches = pd.DataFrame()
+
+    # Non-shortlisted candidates must fall back to enriched_full.csv
+    if matches.empty:
+        df = _load_full(date_str)
+        if df is None or df.empty or "Symbol" not in df.columns:
+            abort(404)
+        matches = df[df["Symbol"].astype(str).str.upper() == symbol]
+
     if matches.empty:
         abort(404)
 
     raw = matches.iloc[0].to_dict()
+
+    # Transaction-analysis fields are stored in enriched_full.csv.
+    # Merge them into the shortlisted row without changing existing
+    # scoring, fundamental, or technical fields.
+    full_df = _load_full(date_str)
+
+    if full_df is not None and not full_df.empty and "Symbol" in full_df.columns:
+        full_matches = full_df[
+            full_df["Symbol"].astype(str).str.upper() == symbol
+        ]
+
+        if not full_matches.empty:
+            full_raw = full_matches.iloc[0].to_dict()
+
+            transaction_fields = [
+                "ReportedBuyTxn",
+                "PricedValuePurchased",
+                "MissingValueQty",
+                "MissingValueTxn",
+                "MarketBuyValue",
+                "MarketSellValue",
+                "NetBuyValue",
+                "SellBuyRatioPct",
+                "HasMarketSell",
+                "SellBuyExclusion",
+            ]
+
+            for field in transaction_fields:
+                if field in full_raw:
+                    raw[field] = full_raw[field]
+
     row = _df_to_rows(pd.DataFrame([raw]), include_flags=True)[0]
     row["trades"] = (_load_trades(date_str) or {}).get(symbol, [])
     return jsonify(row)
