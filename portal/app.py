@@ -86,7 +86,7 @@ def _ryb_watermark_svg() -> Markup:
         f'viewBox="0 0 {size} {size}" '
         f'aria-hidden="true" focusable="false" '
         f'style="position:fixed;top:0;left:0;width:100vw;height:100vh;'
-        f'pointer-events:none;z-index:0;opacity:0.03;overflow:visible;">'
+        f'pointer-events:none;z-index:0;opacity:0.06;overflow:visible;">'
 
         f'<defs>'
         f'<clipPath id="cRwm"><circle {c(rx,ry)}/></clipPath>'
@@ -886,9 +886,23 @@ def scan_summary(date_str: str):
     _validate_scan_date(date_str)
     view = request.args.get("view", "shortlist")
     if view == "candidates":
-        rows = _summary_rows(_load_full(date_str), include_flags=True)
+        full_df = _load_full(date_str)
+        shortlist_df = _load_filtered(date_str)
+
+        rows = _summary_rows(full_df, include_flags=True)
+
+        shortlisted_symbols = set()
+        if shortlist_df is not None and not shortlist_df.empty and "Symbol" in shortlist_df.columns:
+            shortlisted_symbols = set(
+                shortlist_df["Symbol"].astype(str).str.upper()
+            )
+
+        for row in rows:
+            row["is_shortlisted"] = row.get("symbol", "").upper() in shortlisted_symbols
     else:
         rows = _summary_rows(_load_filtered(date_str), include_flags=False)
+        for row in rows:
+            row["is_shortlisted"] = True
     return jsonify({"date": date_str, "view": view, "rows": rows})
 
 

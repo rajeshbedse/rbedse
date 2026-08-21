@@ -69,7 +69,7 @@
     const cls = categoryClass(r.category);
     const diffCls = Number(r.price_diff_pct) < 0 ? 'negative' : 'positive';
     const score = r.score ?? '—';
-    return `<article class="stock-card research-card" data-symbol="${esc(r.symbol)}">
+    return `<article class="stock-card research-card ${r.is_shortlisted ? "is-shortlisted" : ""}" data-symbol="${esc(r.symbol)}">
       <button class="stock-card-main research-card-main" type="button" data-stock="${esc(r.symbol)}" aria-label="View analysis for ${esc(r.symbol)}">
         <div class="research-card-head">
           <div class="research-card-identity">
@@ -104,7 +104,7 @@
   function tableRow(r) {
     const cls = categoryClass(r.category);
     const diffCls = Number(r.price_diff_pct) < 0 ? 'negative' : 'positive';
-    return `<tr><td><div class="table-stock"><span class="stock-symbol">${esc(r.symbol)}</span><span>${esc(r.company)}</span></div></td><td><div class="table-score-wrap"><span class="table-score ${scoreClass(r.score)}">${r.score ?? '—'}</span>${scoreMeter(r.score, true)}</div></td><td><span class="table-category category-${cls}">${esc(r.category || '—')}</span></td><td>${money(r.last_price)}</td><td>${money(r.avg_price)}</td><td class="${diffCls}">${pct(r.price_diff_pct)}</td><td>${r.promo_holding == null ? '—' : num(r.promo_holding)+'%'}</td><td>${crMoney(r.value_cr)}</td><td>${fmtDate(r.acq_to_dt)}</td><td><button class="view-stock-btn" type="button" data-stock="${esc(r.symbol)}">View →</button></td></tr>`;
+    return `<tr class="${r.is_shortlisted ? "is-shortlisted" : ""}"><td><div class="table-stock"><span class="stock-symbol">${esc(r.symbol)}</span><span>${esc(r.company)}</span></div></td><td><div class="table-score-wrap"><span class="table-score ${scoreClass(r.score)}">${r.score ?? '—'}</span>${scoreMeter(r.score, true)}</div></td><td><span class="table-category category-${cls}">${esc(r.category || '—')}</span></td><td>${money(r.last_price)}</td><td>${money(r.avg_price)}</td><td class="${diffCls}">${pct(r.price_diff_pct)}</td><td>${r.promo_holding == null ? '—' : num(r.promo_holding)+'%'}</td><td>${crMoney(r.value_cr)}</td><td>${fmtDate(r.acq_to_dt)}</td><td><button class="view-stock-btn" type="button" data-stock="${esc(r.symbol)}">View →</button></td></tr>`;
   }
 
   function render() {
