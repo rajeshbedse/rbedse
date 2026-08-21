@@ -8,8 +8,8 @@ on:
         required: false
         type: string
   schedule:
-    # 20:30 IST (15:00 UTC), Monday-Friday
-    - cron: "0 15 * * 1-5"
+    # 20:30 IST (15:00 UTC), Monday-Saturday
+    - cron: "0 15 * * 1-6"
 
 permissions:
   contents: write
