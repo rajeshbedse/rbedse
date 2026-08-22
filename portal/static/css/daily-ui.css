@@ -14,7 +14,11 @@
 .scan-row-datebox .scan-row-day { background: transparent; padding: 0; color: var(--color-secondary); font-size: 11px; line-height: 1.1; }
 .scan-row-datebox .scan-row-number { font-size: 28px; line-height: .95; font-weight: 800; letter-spacing: -.04em; color: #101828; }
 .scan-row-datebox .scan-row-month { font-size: 10px; font-weight: 600; color: var(--color-muted-light); white-space: nowrap; }
-.scan-row--latest .scan-row-datebox { border-color: #B8CCEE; background: #F7FAFF; box-shadow: inset 0 0 0 1px rgba(31,75,143,.05); }
+
+/* Latest scan: subtle row highlight instead of a "Latest" badge. */
+.scan-row--latest { background: #E8EEF7; box-shadow: inset 3px 0 0 var(--color-secondary); }
+.scan-row--latest .scan-latest-label { display: none !important; }
+.scan-row--latest .scan-row-datebox { border-color: #B8CCEE; background: #F4F7FC; box-shadow: inset 0 0 0 1px rgba(31,75,143,.08); }
 .scan-row-status-wrap { min-width: 0; }
 .scan-row-status { display: block; font-size: var(--text-sm); font-weight: 600; color: var(--color-text); white-space: nowrap; }
 .scan-row-time { display: flex; align-items: center; gap: .38rem; margin-top: .28rem; color: var(--color-muted-light); font-size: var(--text-xs); white-space: nowrap; }
