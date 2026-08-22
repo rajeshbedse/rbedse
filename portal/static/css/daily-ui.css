@@ -36,7 +36,12 @@
   .scan-row-datebox { width: 72px; min-height: 78px; }
   .scan-row-datebox .scan-row-number { font-size: 31px; }
   .scan-row-status { font-size: var(--text-sm); }
+  .scan-row-num--short, .scan-row-num--cand { text-align: center; }
 }
+
+/* Keep the public history compact: show only the seven newest scan rows.
+   Historical output directories/files remain untouched in GitHub. */
+.scan-list > .scan-row:nth-child(n+9) { display: none; }
 
 @media (max-width: 640px) {
   .logic-strip { padding: 1rem 0 1.2rem; }
