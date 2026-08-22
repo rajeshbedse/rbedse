@@ -49,7 +49,7 @@
     <div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>No research reports found yet. Reports will appear here once the daily analysis runs.</p></div>
     {% else %}
     <div class="scan-list" role="table" aria-label="Research scan history">
-      <div class="scan-list-header" role="row"><span></span><span>Date</span><span>Shortlist ratio</span><span style="text-align:right">Shortlisted</span><span style="text-align:right">Candidates</span><span></span><span style="text-align:right">Open</span></div>
+      <div class="scan-list-header" role="row"><span></span><span>Date</span><span>Shortlist ratio</span><span><span class="scan-header-line">Shortlisted</span><span class="scan-header-line">Candidates</span></span><span><span class="scan-header-line">Total</span><span class="scan-header-line">Candidates</span></span><span></span><span style="text-align:right">Open</span></div>
       {% for d in dates %}
       {% if d.has_excel or d.has_full %}<a href="{{ url_for('scan_detail', date_str=d.date_str) }}" class="scan-row {% if loop.first %}scan-row--latest{% endif %}" role="row" aria-label="Scan {{ d.display }} — {{ d.shortlist }} shortlisted of {{ d.candidates }} candidates">{% else %}<div class="scan-row" role="row">{% endif %}
         <div class="scan-row-badge">{% if loop.first %}<span class="scan-latest-dot" title="Latest scan"></span>{% endif %}</div>
@@ -61,7 +61,7 @@
         <div class="scan-row-num scan-row-num--short">{% if d.has_excel %}{{ d.shortlist }}{% endif %}</div>
         <div class="scan-row-num scan-row-num--cand">{% if d.has_full %}{{ d.candidates }}{% endif %}</div>
         <div>{% if loop.first %}<span class="scan-latest-label">Latest</span>{% elif not d.has_excel and not d.has_full %}<span class="scan-row-processing">Processing</span>{% endif %}</div>
-        <div style="text-align:right">{% if d.has_excel or d.has_full %}<span class="scan-row-cta">Open <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>{% else %}<span class="scan-row-cta scan-row-cta--disabled">—</span>{% endif %}</div>
+        <div style="text-align:right">{% if d.has_excel or d.has_full %}<span class="scan-row-cta">Open <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7-7"/></svg></span>{% else %}<span class="scan-row-cta scan-row-cta--disabled">—</span>{% endif %}</div>
       {% if d.has_excel or d.has_full %}</a>{% else %}</div>{% endif %}
       {% endfor %}
     </div>{% endif %}
