@@ -10,7 +10,7 @@
 .logic-grid .logic-icon--rupee { font-size: 1rem; font-weight: 800; }
 
 /* Research history date panel and status */
-.scan-row-date { display: flex; align-items: center; gap: .7rem; min-width: 0; }
+.scan-row-date { display: flex; align-items: center; gap: .8rem; min-width: 0; }
 .scan-row-datebox { width: 68px; min-height: 68px; display: grid; grid-template-rows: auto 1fr auto; align-items: center; justify-items: center; padding: .35rem .3rem .4rem; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); line-height: 1; flex: 0 0 auto; }
 .scan-row-datebox .scan-row-day { background: transparent; padding: 0; color: var(--color-secondary); font-size: 11px; line-height: 1.1; }
 .scan-row-datebox .scan-row-number { font-size: 28px; line-height: .95; font-weight: 800; letter-spacing: -.04em; color: #101828; }
@@ -20,10 +20,17 @@
 .scan-row-status { display: block; font-size: var(--text-sm); font-weight: 600; color: var(--color-text); white-space: nowrap; }
 .scan-row-time { display: flex; align-items: center; gap: .38rem; margin-top: .28rem; color: var(--color-muted-light); font-size: var(--text-xs); white-space: nowrap; }
 .scan-row-time svg { flex: 0 0 auto; }
+.scan-list-header > span { min-width: 0; }
+.scan-list-header > span:nth-child(4),
+.scan-list-header > span:nth-child(5) { line-height: 1.15; text-align: right; }
 
 @media (min-width: 701px) {
-  .scan-list-header { grid-template-columns: 2.5rem 10.5rem 1fr 5rem 5rem 5.5rem 5.5rem; }
-  .scan-row { grid-template-columns: 2.5rem 10.5rem 1fr 5rem 5rem 5.5rem 5.5rem; min-height: 82px; padding: .7rem 1.1rem; }
+  /* Fixed information columns keep the date/status block together while the ratio gets the flexible space. */
+  .scan-list-header { grid-template-columns: 3rem 14rem minmax(22rem, 1fr) 7rem 7rem 6rem 6rem; }
+  .scan-row { grid-template-columns: 3rem 14rem minmax(22rem, 1fr) 7rem 7rem 6rem 6rem; min-height: 96px; padding: .75rem 1.1rem; }
+  .scan-row-datebox { width: 72px; min-height: 78px; }
+  .scan-row-datebox .scan-row-number { font-size: 31px; }
+  .scan-row-status { font-size: var(--text-sm); }
 }
 
 @media (max-width: 640px) {
