@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}RYB Finserv — Research Dashboard{% endblock %}
-{% block meta_desc %}RYB Finserv — where disciplined thinking meets compounding wealth. Weekly promoter-conviction equity research.{% endblock %}
+{% block meta_desc %}RYB Finserv — where disciplined thinking meets compounding wealth. Daily promoter-conviction equity research.{% endblock %}
 
 {% block content %}
 
@@ -12,7 +12,7 @@
     <div class="hero-text">
       <span class="eyebrow">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        Weekly · Conviction-Driven · Promoter Intelligence
+        Daily · Conviction-Driven · Promoter Intelligence
       </span>
 
       <h1 class="hero-headline">
@@ -166,10 +166,6 @@
       <div class="logic-grid">
         <span class="logic-label">How we screen</span>
         <span class="logic-item">
-          <span class="logic-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-          Promoter market buys only
-        </span>
-        <span class="logic-item">
           <span class="logic-icon"><span class="logic-icon--rupee">₹</span></span>
           Min. ₹20L conviction
         </span>
@@ -183,7 +179,7 @@
         </span>
         <span class="logic-item">
           <span class="logic-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-          Weekly cadence
+          Daily cadence
         </span>
       </div>
     </div>
@@ -202,7 +198,7 @@
     {% if not dates %}
     <div class="empty-state">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      <p>No research reports found yet. Reports will appear here once the weekly analysis runs.</p>
+      <p>No research reports found yet. Reports will appear here once the daily analysis runs.</p>
     </div>
     {% else %}
     <div class="scan-list" role="table" aria-label="Research scan history">
