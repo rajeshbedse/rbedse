@@ -19,10 +19,12 @@
 .scan-row-status { display: block; font-size: var(--text-sm); font-weight: 600; color: var(--color-text); white-space: nowrap; }
 .scan-row-time { display: flex; align-items: center; gap: .38rem; margin-top: .28rem; color: var(--color-muted-light); font-size: var(--text-xs); white-space: nowrap; }
 .scan-row-time svg { flex: 0 0 auto; }
-.scan-list-header > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Keep every desktop column heading visually centred within its column. */
+.scan-list-header > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
 .scan-list-header > span:nth-child(3), .scan-list-header > span:nth-child(4) { line-height: 1.15; text-align: center; }
 .scan-list-header .scan-header-line { display: block; white-space: nowrap; }
-.scan-list-header > span:last-child { text-align: right; font-size: 0; }
+.scan-list-header > span:last-child { text-align: center !important; font-size: 0; }
 .scan-list-header > span:last-child::after { content: 'Research Report'; font-size: var(--text-xxs); }
 .scan-row-cta { font-size: 0; }
 .scan-row-cta::before { content: 'View report'; font-size: var(--text-sm); }
