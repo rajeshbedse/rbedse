@@ -9,7 +9,6 @@
 .logic-grid .logic-icon svg { width: 16px; height: 16px; }
 .logic-grid .logic-icon--rupee { font-size: 1rem; font-weight: 800; }
 
-/* Research history date panel and status */
 .scan-row-date { display: flex; align-items: center; gap: .8rem; min-width: 0; }
 .scan-row-datebox { width: 68px; min-height: 68px; display: grid; grid-template-rows: auto 1fr auto; align-items: center; justify-items: center; padding: .35rem .3rem .4rem; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); line-height: 1; flex: 0 0 auto; }
 .scan-row-datebox .scan-row-day { background: transparent; padding: 0; color: var(--color-secondary); font-size: 11px; line-height: 1.1; }
@@ -20,14 +19,18 @@
 .scan-row-status { display: block; font-size: var(--text-sm); font-weight: 600; color: var(--color-text); white-space: nowrap; }
 .scan-row-time { display: flex; align-items: center; gap: .38rem; margin-top: .28rem; color: var(--color-muted-light); font-size: var(--text-xs); white-space: nowrap; }
 .scan-row-time svg { flex: 0 0 auto; }
-.scan-list-header > span { min-width: 0; }
-.scan-list-header > span:nth-child(3),
-.scan-list-header > span:nth-child(4) { line-height: 1.15; text-align: right; }
+.scan-list-header > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scan-list-header > span:nth-child(3), .scan-list-header > span:nth-child(4) { line-height: 1.15; text-align: center; }
+.scan-list-header .scan-header-line { display: block; white-space: nowrap; }
+.scan-list-header > span:last-child { text-align: right; font-size: 0; }
+.scan-list-header > span:last-child::after { content: 'Research Report'; font-size: var(--text-xxs); }
+.scan-row-cta { font-size: 0; }
+.scan-row-cta::before { content: 'View report'; font-size: var(--text-sm); }
+.scan-row-cta svg { display: inline-block; margin-left: .3rem; vertical-align: middle; }
 
 @media (min-width: 701px) {
-  /* No redundant status-dot column: keep date/status together and give the ratio room to breathe. */
-  .scan-list-header { grid-template-columns: 18rem minmax(18rem, 1fr) 7rem 7rem 6rem 6rem; }
-  .scan-row { grid-template-columns: 18rem minmax(18rem, 1fr) 7rem 7rem 6rem 6rem; min-height: 96px; padding: .75rem 1.1rem; }
+  .scan-list-header { grid-template-columns: 18rem minmax(18rem, 1fr) 7rem 7rem 6rem 7rem; }
+  .scan-row { grid-template-columns: 18rem minmax(18rem, 1fr) 7rem 7rem 6rem 7rem; min-height: 96px; padding: .75rem 1.1rem; }
   .scan-row-datebox { width: 72px; min-height: 78px; }
   .scan-row-datebox .scan-row-number { font-size: 31px; }
   .scan-row-status { font-size: var(--text-sm); }
@@ -41,7 +44,6 @@
   .logic-grid .logic-icon svg { width: 15px; height: 15px; }
 }
 
-/* Mobile history: FRI / 21 / Aug 2026 in a square, with status and time beside it. */
 @media (max-width: 700px) {
   .scan-row { position: relative; grid-template-columns: 68px 1fr auto; grid-template-rows: auto; gap: .35rem .7rem; padding: .65rem .75rem; min-height: 86px; }
   .scan-row-date { grid-column: 1 / 3; grid-row: 1; gap: .7rem; min-width: 0; }
@@ -56,5 +58,6 @@
   .scan-row-bar-wrap, .scan-row-num--short, .scan-row-num--cand { display: none; }
   .scan-row > div:nth-child(5) { position: absolute; top: .65rem; right: 4.7rem; }
   .scan-row > div:last-child { grid-column: 3; grid-row: 1; align-self: center; }
-  .scan-row-cta { font-size: var(--text-sm); }
+  .scan-row-cta { font-size: 0; }
+  .scan-row-cta::before { font-size: var(--text-sm); }
 }
