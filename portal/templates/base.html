@@ -8,11 +8,24 @@
   <meta name="description" content="{% block meta_desc %}RYB Finserv is an independent research platform. Explore quality-screened stock research reports.{% endblock %}" />
   <link rel="icon" href="{{ url_for('static', filename='icons/favicon.svg') }}" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ css_version }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/daily-ui.css') }}?v={{ css_version }}-daily3" />
   {% block head_extra %}{% endblock %}
+
+  <!-- Google Analytics 4 -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-0752V41GMF"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-0752V41GMF', {
+      page_title: document.title,
+      send_page_view: true
+    });
+  </script>
 </head>
 <body>
   {{ ryb_watermark_svg }}
@@ -27,11 +40,30 @@
     <div class="footer-top"><div class="container footer-top-inner">
       <div class="footer-col footer-col--brand"><a href="{{ url_for('index') }}" class="logo logo-footer" aria-label="RYB Finserv home"><span class="logo-mark" aria-hidden="true">{{ ryb_logo_svg(size=28, id_suffix="f") }}</span><span class="logo-text">RYB <strong>Finserv</strong></span></a><p class="footer-tagline">Conviction. Quantified.</p><p class="footer-tagline-sub">Daily equity research for the discerning investor.</p></div>
       <div class="footer-col"><h3 class="footer-col-heading">About</h3><p class="footer-col-text">RYB Finserv is an independent research platform that applies a proprietary multi-factor methodology to identify high-conviction equity opportunities from publicly available regulatory disclosures.</p></div>
-      <div class="footer-col"><h3 class="footer-col-heading">Contact</h3><ul class="footer-links"><li><a href="mailto:ryb.finserv@gmail.com" class="footer-link-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>ryb.finserv@gmail.com</a></li><li><span class="footer-link-item footer-link-item--plain"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>India</span></li></ul></div>
+      <div class="footer-col"><h3 class="footer-col-heading">Contact</h3><ul class="footer-links"><li><a href="mailto:ryb.finserv@gmail.com" class="footer-link-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>ryb.finserv@gmail.com</a></li><li><span class="footer-link-item footer-link-item--plain"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1-4-10z"/></svg>India</span></li></ul></div>
     </div></div>
     <div class="footer-bottom"><div class="container footer-bottom-inner"><p class="footer-disclaimer-text"><strong>Disclaimer:</strong> This portal is for <em>research and informational purposes only</em>. All information is derived from publicly available regulatory disclosures. It does not constitute financial advice or a recommendation to buy or sell any security. Past activity does not guarantee future returns. Always consult a SEBI-registered investment advisor before making any investment decision.</p><p class="footer-copy">&copy; {{ now_year }} RYB Finserv. All rights reserved.</p></div></div>
   </footer>
   <script src="{{ url_for('static', filename='js/main.js') }}?v={{ main_js_version }}" defer></script>
   {% block scripts %}{% endblock %}
+  <script>
+    // RYB-specific GA4 interaction events. Uses event delegation so it also
+    // captures dynamically rendered stock-detail controls.
+    document.addEventListener('click', function (event) {
+      if (typeof gtag !== 'function') return;
+      const target = event.target.closest('a, button');
+      if (!target) return;
+
+      if (target.matches('.hero-cta a.btn-primary')) {
+        gtag('event', 'latest_scan_click', { destination: target.getAttribute('href') || '' });
+      } else if (target.matches('.scan-row')) {
+        gtag('event', 'research_report_view', { scan_date: target.getAttribute('href')?.split('/').pop() || '' });
+      } else if (target.matches('.stock-card-main')) {
+        gtag('event', 'stock_detail_view', { stock_symbol: target.dataset.stock || '' });
+      } else if (target.matches('.scan-tab')) {
+        gtag('event', 'scan_tab_view', { view: target.dataset.view || '' });
+      }
+    });
+  </script>
 </body>
 </html>
