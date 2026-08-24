@@ -3,14 +3,18 @@ Main pipeline orchestrator — ties Phases 1, 2, 3 together.
 Called by the CLI entry point (run_pipeline) and by the scheduler.
 """
 import argparse
+import csv as _csv
+import io
 import json
 import logging
 import sys
 import time
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
+import requests
 from playwright.sync_api import sync_playwright
 
 from . import __version__
@@ -24,6 +28,85 @@ from . import scraper, analyzer, reporter
 # regardless of which directory the user runs the exe from.
 _REPO_ROOT   = Path(__file__).parent.parent
 _OUTPUT_ROOT = _REPO_ROOT / OUTPUT_ROOT
+
+
+def _setup_logging(log_path: Path) -> None:
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s  %(message)s",
+        datefmt="%H:%M:%S",
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(log_path, encoding="utf-8"),
+        ],
+    )
+
+
+def _download_close_bhavcopy(max_lookback: int = 5, as_of_date=None):
+    """
+    Download the most recent NSE Bhavcopy and return official closing prices.
+
+    CMP in the report must be based on the NSE closing price (ClsPric), not
+    the last traded price (LastPric).  DMA calculations already use ClsPric.
+    This function mirrors analyzer._download_bhavcopy but deliberately reads
+    ClsPric so CMP and the technical indicators use the same price basis.
+    """
+    base = (
+        "https://nsearchives.nseindia.com/content/cm/"
+        "BhavCopy_NSE_CM_0_0_0_{date}_F_0000.csv.zip"
+    )
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "*/*",
+        "Referer": "https://www.nseindia.com/",
+    }
+    session = requests.Session()
+    session.headers.update(headers)
+
+    today = as_of_date or datetime.now().date()
+    attempted = []
+
+    for delta in range(max_lookback + 1):
+        d = today - pd.Timedelta(days=delta)
+        if d.weekday() >= 5:
+            continue
+        ds = d.strftime("%Y%m%d")
+        attempted.append(ds)
+        url = base.format(date=ds)
+        try:
+            resp = session.get(url, timeout=20)
+            if resp.status_code != 200 or resp.content[:2] != b"PK":
+                continue
+            z = zipfile.ZipFile(io.BytesIO(resp.content))
+            raw = z.read(z.namelist()[0]).decode("utf-8")
+            rows = _csv.DictReader(raw.splitlines())
+            prices = {}
+            for row in rows:
+                series = row.get("SctySrs", "").strip()
+                if series not in {"EQ", "BE", "BZ"}:
+                    continue
+                sym = row.get("TckrSymb", "").strip()
+                if sym in prices and series != "EQ":
+                    continue
+                try:
+                    prices[sym] = float(row["ClsPric"])
+                except (ValueError, KeyError):
+                    pass
+            logging.getLogger(__name__).info(
+                "  CMP prices loaded from NSE closing price for %s — %d symbols",
+                d.strftime("%Y-%m-%d"), len(prices),
+            )
+            return prices
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "  NSE closing-price fetch failed for %s: %s", ds, exc
+            )
+
+    logging.getLogger(__name__).warning(
+        "  NSE closing-price Bhavcopy: no file found for dates %s", attempted
+    )
+    return None
 
 
 def _setup_logging(log_path: Path) -> None:
@@ -141,7 +224,10 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
         return run_dir
 
     # Phase 2 — analyse
-    # Phase 2 — analyse (prices from Bhavcopy; no browser needed)
+    # CMP must use official NSE closing price (ClsPric), while DMA already
+    # uses ClsPric. Override the analyzer's price download for this pipeline
+    # run so CMP and technical calculations share the same price basis.
+    analyzer._download_bhavcopy = _download_close_bhavcopy
     as_of = datetime.strptime(date_str, "%Y-%m-%d").date()
     final = analyzer.run(csv_path, full_csv, as_of_date=as_of)
 
@@ -168,7 +254,7 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     meta = {
         "run_date"      : date_str,
         "generated_at"  : datetime.now(timezone.utc).isoformat(),
-	"status"        : "success",
+        "status"        : "success",
         "filing_period" : NSE_FILING_PERIOD,
         "raw_filings"   : raw_count,
         "failed_urls"   : failed_urls,
