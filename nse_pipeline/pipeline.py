@@ -30,25 +30,12 @@ _REPO_ROOT   = Path(__file__).parent.parent
 _OUTPUT_ROOT = _REPO_ROOT / OUTPUT_ROOT
 
 
-def _setup_logging(log_path: Path) -> None:
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s  %(message)s",
-        datefmt="%H:%M:%S",
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(log_path, encoding="utf-8"),
-        ],
-    )
-
-
 def _download_close_bhavcopy(max_lookback: int = 5, as_of_date=None):
     """
     Download the most recent NSE Bhavcopy and return official closing prices.
 
     CMP in the report must be based on the NSE closing price (ClsPric), not
-    the last traded price (LastPric).  DMA calculations already use ClsPric.
+    the last traded price (LastPric). DMA calculations already use ClsPric.
     This function mirrors analyzer._download_bhavcopy but deliberately reads
     ClsPric so CMP and the technical indicators use the same price basis.
     """
