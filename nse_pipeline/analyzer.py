@@ -408,7 +408,7 @@ def _download_bhavcopy(max_lookback: int = 5, as_of_date: date | None = None) ->
                 if sym in prices and series != "EQ":
                     continue
                 try:
-                    prices[sym] = float(row["LastPric"])
+                    prices[sym] = float(row["ClsPric"])
                 except (ValueError, KeyError):
                     pass
             log.info(
