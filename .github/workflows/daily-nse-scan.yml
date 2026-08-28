@@ -8,10 +8,12 @@ on:
         required: false
         type: string
   schedule:
-    # 20:30 IST (15:00 UTC), Monday-Saturday — generate today's report
-    - cron: "0 15 * * 1-6"
-    # 09:30 IST (04:00 UTC), Tuesday-Saturday — refresh previous day's report
-    - cron: "0 4 * * 2-6"
+    # 20:30 IST, Monday-Saturday — generate today's report
+    - cron: "30 20 * * 1-6"
+      timezone: "Asia/Kolkata"
+    # 09:30 IST, Tuesday-Saturday — refresh previous day's report
+    - cron: "30 9 * * 2-6"
+      timezone: "Asia/Kolkata"
 
 permissions:
   contents: write
@@ -58,7 +60,7 @@ jobs:
             echo "run_date=$INPUT_DATE" >> "$GITHUB_OUTPUT"
             echo "Run mode: manual"
             echo "Report date: $INPUT_DATE"
-          elif [ "$SCHEDULE" = "0 4 * * 2-6" ]; then
+          elif [ "$SCHEDULE" = "30 9 * * 2-6" ]; then
             # Morning run: always refresh the previous IST calendar day.
             echo "run_date=$(TZ=Asia/Kolkata date -d 'yesterday' +%F)" >> "$GITHUB_OUTPUT"
             echo "Run mode: morning refresh"
