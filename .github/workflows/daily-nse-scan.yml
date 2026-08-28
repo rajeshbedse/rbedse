@@ -8,10 +8,10 @@ on:
         required: false
         type: string
   schedule:
-    # 20:30 IST (15:00 UTC), Monday-Friday
-    - cron: "0 15 * * 1-5"
-    # 11:00 IST (05:30 UTC), Saturday
-    - cron: "30 5 * * 6"
+    # 20:30 IST (15:00 UTC), Monday-Saturday — generate today's report
+    - cron: "0 15 * * 1-6"
+    # 09:30 IST (04:00 UTC), Tuesday-Saturday — refresh previous day's report
+    - cron: "0 4 * * 2-6"
 
 permissions:
   contents: write
@@ -50,41 +50,24 @@ jobs:
       - name: Determine run date
         id: date
         shell: bash
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          INPUT_DATE: ${{ inputs.run_date }}
         run: |
-          if [ -n "${{ inputs.run_date }}" ]; then
-            echo "run_date=${{ inputs.run_date }}" >> "$GITHUB_OUTPUT"
+          if [ -n "$INPUT_DATE" ]; then
+            echo "run_date=$INPUT_DATE" >> "$GITHUB_OUTPUT"
+            echo "Run mode: manual"
+            echo "Report date: $INPUT_DATE"
+          elif [ "$SCHEDULE" = "0 4 * * 2-6" ]; then
+            # Morning run: always refresh the previous IST calendar day.
+            echo "run_date=$(TZ=Asia/Kolkata date -d 'yesterday' +%F)" >> "$GITHUB_OUTPUT"
+            echo "Run mode: morning refresh"
+            echo "Report date: previous IST day"
           else
+            # Evening run: use the current IST calendar day.
             echo "run_date=$(TZ=Asia/Kolkata date +%F)" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Ensure CMP uses NSE closing price
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("nse_pipeline/analyzer.py")
-          text = path.read_text(encoding="utf-8")
-          old = 'prices[sym] = float(row["LastPric"])'
-          new = 'prices[sym] = float(row["ClsPric"])'
-          if old in text:
-              text = text.replace(old, new)
-              path.write_text(text, encoding="utf-8")
-              print("Updated CMP source: LastPric -> ClsPric")
-          elif new in text:
-              print("CMP source already uses ClsPric")
-          else:
-              raise SystemExit("ERROR: CMP price field not found")
-          PY
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add nse_pipeline/analyzer.py
-          if git diff --cached --quiet; then
-            echo "No source change required."
-          else
-            git commit -m "Fix CMP to use NSE closing price"
-            git push
+            echo "Run mode: evening scan"
+            echo "Report date: current IST day"
           fi
 
       - name: Run NSE pipeline
