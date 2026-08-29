@@ -44,18 +44,99 @@
 
   <section class="scan-history" id="scan-history"><div class="container"><div class="history-header"><div><h2 class="history-title"><span>Research</span> History</h2><p class="history-sub">Pattern analysis &amp; logic validation — always base decisions on the <strong>latest scan</strong>.</p></div></div>
     <style>
-      /* Research History: center every header and data cell while preserving the existing responsive grid. */
+      /* Research History: desktop keeps a compact data table; mobile turns the metric area into a two-level card. */
       .scan-list-header > span,
       .scan-row > div { text-align: center; }
       .scan-row-date { justify-content: center; }
       .scan-row-bar-wrap { justify-content: center; }
       .scan-row-cta { justify-content: center; }
+
+      /* Desktop: Date | Shortlisted | Candidates Assessed | Shortlist Rate | Report */
+      .scan-list-header,
+      .scan-row {
+        grid-template-columns: minmax(100px, 1.05fr) minmax(90px, .85fr) minmax(115px, 1fr) minmax(125px, 1.05fr) 24px minmax(130px, 1.15fr) !important;
+      }
+      .scan-list-header > span:nth-child(1), .scan-row > div:nth-child(1) { grid-column: 1; }
+      .scan-list-header > span:nth-child(2), .scan-row > div:nth-child(2) { grid-column: 4; }
+      .scan-list-header > span:nth-child(3), .scan-row > div:nth-child(3) { grid-column: 2; }
+      .scan-list-header > span:nth-child(4), .scan-row > div:nth-child(4) { grid-column: 3; }
+      .scan-list-header > span:nth-child(5), .scan-row > div:nth-child(5) { grid-column: 5; }
+      .scan-list-header > span:nth-child(6), .scan-row > div:nth-child(6) { grid-column: 6; }
+      .scan-list-header > span:nth-child(2) { order: 4; }
+      .scan-list-header > span:nth-child(3) { order: 2; }
+      .scan-list-header > span:nth-child(4) { order: 3; }
+
+      @media (max-width: 720px) {
+        .scan-list-header { display: none !important; }
+        .scan-row {
+          display: grid !important;
+          grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1fr) !important;
+          grid-template-rows: auto auto !important;
+          column-gap: .55rem !important;
+          row-gap: .15rem !important;
+          align-items: center;
+          padding: .85rem .75rem !important;
+          min-height: 126px;
+        }
+        .scan-row > div:nth-child(1) { grid-column: 1; grid-row: 1 / span 2; }
+        .scan-row > div:nth-child(3) { grid-column: 2; grid-row: 1; }
+        .scan-row > div:nth-child(4) { grid-column: 3; grid-row: 1; }
+        .scan-row > div:nth-child(2) {
+          grid-column: 2 / 4;
+          grid-row: 2;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: .55rem;
+          min-width: 0;
+          padding-top: .2rem;
+        }
+        .scan-row > div:nth-child(5), .scan-row > div:nth-child(6) { display: none !important; }
+        .scan-row-num--short::before,
+        .scan-row-num--cand::before {
+          display: block;
+          margin-bottom: .08rem;
+          font-size: 10px;
+          line-height: 1.1;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: .055em;
+          color: var(--color-muted-light);
+        }
+        .scan-row-num--short::before { content: 'Shortlisted'; }
+        .scan-row-num--cand::before { content: 'Assessed'; }
+        .scan-row-num--short, .scan-row-num--cand {
+          display: flex !important;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          font-size: 20px;
+          line-height: 1.1;
+          font-weight: 800;
+          font-variant-numeric: tabular-nums;
+          color: var(--color-text);
+        }
+        .scan-row-bar-wrap .scan-row-bar-track {
+          width: min(100%, 150px);
+          height: 6px;
+          flex: 0 1 150px;
+          margin: 0;
+        }
+        .scan-row-ratio {
+          font-size: 13px !important;
+          font-weight: 800 !important;
+          color: var(--color-secondary) !important;
+          min-width: 38px;
+        }
+        .scan-row-datebox { margin-inline: auto; }
+        .scan-row--latest { border-left-width: 3px; }
+      }
     </style>
     {% if not dates %}
     <div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>No research reports found yet. Reports will appear here once the daily analysis runs.</p></div>
     {% else %}
     <div class="scan-list" role="table" aria-label="Research scan history">
-      <div class="scan-list-header" role="row"><span>Date</span><span>Shortlist ratio</span><span><span class="scan-header-line">Shortlisted</span><span class="scan-header-line">Candidates</span></span><span><span class="scan-header-line">Total</span><span class="scan-header-line">Candidates</span></span><span></span><span>Research report</span></div>
+      <div class="scan-list-header" role="row"><span>Date</span><span>Shortlist Rate</span><span>Shortlisted</span><span>Candidates Assessed</span><span></span><span>Research report</span></div>
       {% for d in dates %}
       {% if d.has_excel or d.has_full %}<a href="{{ url_for('scan_detail', date_str=d.date_str) }}" class="scan-row {% if loop.first %}scan-row--latest{% endif %}" role="row" aria-label="Scan {{ d.display }} — {{ d.shortlist }} shortlisted of {{ d.candidates }} candidates">{% else %}<div class="scan-row" role="row">{% endif %}
         <div class="scan-row-date"><div class="scan-row-datebox" aria-label="{{ d.weekday[:3] }} {{ d.display }}"><span class="scan-row-day">{{ d.weekday[:3] }}</span><span class="scan-row-number">{{ d.display.split(' ')[0] }}</span><span class="scan-row-month">{{ d.display.split(' ')[1:]|join(' ') }}</span></div></div>
