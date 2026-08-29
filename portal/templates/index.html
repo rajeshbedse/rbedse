@@ -44,13 +44,14 @@
 
   <section class="scan-history" id="scan-history"><div class="container"><div class="history-header"><div><h2 class="history-title"><span>Research</span> History</h2><p class="history-sub">Pattern analysis &amp; logic validation — always base decisions on the <strong>latest scan</strong>.</p></div></div>
     <style>
-      /* Research History: desktop uses one real 5-column grid; mobile keeps its existing 2-level card. */
+      /* Research History: desktop uses compact fixed columns; mobile keeps its existing 2-level card. */
       @media (min-width: 721px) {
         .scan-list-header,
         .scan-row {
           display: grid !important;
-          grid-template-columns: 170px 150px 220px minmax(240px, 1fr) 180px !important;
-          column-gap: 24px !important;
+          grid-template-columns: 150px 210px 180px 210px 190px !important;
+          column-gap: 10px !important;
+          justify-content: space-between !important;
           align-items: center !important;
         }
 
@@ -87,21 +88,21 @@
 
         .scan-row-bar-wrap {
           align-items: center !important;
-          gap: 12px !important;
+          gap: 8px !important;
         }
 
         .scan-row-bar-wrap .scan-row-bar-track {
-          width: 136px !important;
-          flex: 0 0 136px !important;
+          width: 112px !important;
+          flex: 0 0 112px !important;
           margin: 0 !important;
         }
 
         .scan-row-ratio {
-          min-width: 38px !important;
+          min-width: 34px !important;
           text-align: left !important;
         }
 
-        /* There is no fifth visual metric column; keep the legacy spacer invisible. */
+        /* Hide the legacy processing/spacer column and place the report in column 5. */
         .scan-list-header > span:nth-child(5),
         .scan-row > div:nth-child(5) {
           display: none !important;
@@ -180,7 +181,7 @@
       }
     </style>
     {% if not dates %}
-    <div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>No research reports found yet. Reports will appear here once the daily analysis runs.</p></div>
+    <div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2-2V8z"/></svg><p>No research reports found yet. Reports will appear here once the daily analysis runs.</p></div>
     {% else %}
     <div class="scan-list" role="table" aria-label="Research scan history">
       <div class="scan-list-header" role="row"><span>Date</span><span>Shortlist Rate</span><span>Shortlisted</span><span>Assessed</span><span></span><span>Research report</span></div>
