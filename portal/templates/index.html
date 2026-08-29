@@ -43,6 +43,14 @@
   </div></div></div>
 
   <section class="scan-history" id="scan-history"><div class="container"><div class="history-header"><div><h2 class="history-title"><span>Research</span> History</h2><p class="history-sub">Pattern analysis &amp; logic validation — always base decisions on the <strong>latest scan</strong>.</p></div></div>
+    <style>
+      /* Research History: center every header and data cell while preserving the existing responsive grid. */
+      .scan-list-header > span,
+      .scan-row > div { text-align: center; }
+      .scan-row-date { justify-content: center; }
+      .scan-row-bar-wrap { justify-content: center; }
+      .scan-row-cta { justify-content: center; }
+    </style>
     {% if not dates %}
     <div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>No research reports found yet. Reports will appear here once the daily analysis runs.</p></div>
     {% else %}
