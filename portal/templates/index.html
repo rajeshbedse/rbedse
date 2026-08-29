@@ -44,42 +44,73 @@
 
   <section class="scan-history" id="scan-history"><div class="container"><div class="history-header"><div><h2 class="history-title"><span>Research</span> History</h2><p class="history-sub">Pattern analysis &amp; logic validation — always base decisions on the <strong>latest scan</strong>.</p></div></div>
     <style>
-      /* Research History: desktop keeps a clean five-column alignment; mobile remains unchanged. */
-      .scan-list-header > span,
-      .scan-row > div { text-align: center; }
-      .scan-row-date { justify-content: center; }
-      .scan-row-bar-wrap { justify-content: center; }
-      .scan-row-cta { justify-content: center; }
+      /* Research History: desktop uses one real 5-column grid; mobile keeps its existing 2-level card. */
+      @media (min-width: 721px) {
+        .scan-list-header,
+        .scan-row {
+          display: grid !important;
+          grid-template-columns: 170px 150px 220px minmax(240px, 1fr) 180px !important;
+          column-gap: 24px !important;
+          align-items: center !important;
+        }
 
-      /* Desktop: Date | Shortlisted | Candidates Assessed | Shortlist Rate | Report */
-      .scan-list-header,
-      .scan-row {
-        grid-template-columns: minmax(100px, 1.05fr) minmax(90px, .85fr) minmax(115px, 1fr) minmax(150px, 1.05fr) minmax(130px, 1.15fr) !important;
-      }
-      .scan-list-header > span:nth-child(1), .scan-row > div:nth-child(1) { grid-column: 1; }
-      .scan-list-header > span:nth-child(2), .scan-row > div:nth-child(2) { grid-column: 4; }
-      .scan-list-header > span:nth-child(3), .scan-row > div:nth-child(3) { grid-column: 2; }
-      .scan-list-header > span:nth-child(4), .scan-row > div:nth-child(4) { grid-column: 3; }
-      .scan-list-header > span:nth-child(5), .scan-row > div:nth-child(5) { display: none !important; }
-      .scan-list-header > span:nth-child(6), .scan-row > div:nth-child(6) { grid-column: 5; }
-      .scan-list-header > span:nth-child(2) { order: 4; }
-      .scan-list-header > span:nth-child(3) { order: 2; }
-      .scan-list-header > span:nth-child(4) { order: 3; }
-      .scan-list-header > span:nth-child(6) { order: 5; }
+        .scan-list-header {
+          padding-left: 28px !important;
+          padding-right: 28px !important;
+        }
 
-      /* The rate indicator is a single visual unit, centered under its header. */
-      .scan-row-bar-wrap {
-        align-items: center;
-        gap: 12px;
-      }
-      .scan-row-bar-wrap .scan-row-bar-track {
-        flex: 0 1 136px;
-        width: 136px;
-        margin: 0;
-      }
-      .scan-row-ratio {
-        min-width: 38px;
-        text-align: left;
+        .scan-row {
+          padding-left: 28px !important;
+          padding-right: 28px !important;
+        }
+
+        .scan-list-header > span,
+        .scan-row > div {
+          grid-column: auto !important;
+          grid-row: auto !important;
+          order: initial !important;
+          text-align: center;
+        }
+
+        .scan-row-date,
+        .scan-row-bar-wrap,
+        .scan-row-cta {
+          justify-content: center !important;
+        }
+
+        .scan-row-num--short,
+        .scan-row-num--cand {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .scan-row-bar-wrap {
+          align-items: center !important;
+          gap: 12px !important;
+        }
+
+        .scan-row-bar-wrap .scan-row-bar-track {
+          width: 136px !important;
+          flex: 0 0 136px !important;
+          margin: 0 !important;
+        }
+
+        .scan-row-ratio {
+          min-width: 38px !important;
+          text-align: left !important;
+        }
+
+        /* There is no fifth visual metric column; keep the legacy spacer invisible. */
+        .scan-list-header > span:nth-child(5),
+        .scan-row > div:nth-child(5) {
+          display: none !important;
+        }
+
+        .scan-list-header > span:nth-child(6),
+        .scan-row > div:nth-child(6) {
+          grid-column: 5 !important;
+        }
       }
 
       @media (max-width: 720px) {
