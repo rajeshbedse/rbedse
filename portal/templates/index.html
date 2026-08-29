@@ -44,7 +44,7 @@
 
   <section class="scan-history" id="scan-history"><div class="container"><div class="history-header"><div><h2 class="history-title"><span>Research</span> History</h2><p class="history-sub">Pattern analysis &amp; logic validation — always base decisions on the <strong>latest scan</strong>.</p></div></div>
     <style>
-      /* Research History: desktop keeps a compact data table; mobile turns the metric area into a two-level card. */
+      /* Research History: desktop keeps a clean five-column alignment; mobile remains unchanged. */
       .scan-list-header > span,
       .scan-row > div { text-align: center; }
       .scan-row-date { justify-content: center; }
@@ -54,17 +54,33 @@
       /* Desktop: Date | Shortlisted | Candidates Assessed | Shortlist Rate | Report */
       .scan-list-header,
       .scan-row {
-        grid-template-columns: minmax(100px, 1.05fr) minmax(90px, .85fr) minmax(115px, 1fr) minmax(125px, 1.05fr) 24px minmax(130px, 1.15fr) !important;
+        grid-template-columns: minmax(100px, 1.05fr) minmax(90px, .85fr) minmax(115px, 1fr) minmax(150px, 1.05fr) minmax(130px, 1.15fr) !important;
       }
       .scan-list-header > span:nth-child(1), .scan-row > div:nth-child(1) { grid-column: 1; }
       .scan-list-header > span:nth-child(2), .scan-row > div:nth-child(2) { grid-column: 4; }
       .scan-list-header > span:nth-child(3), .scan-row > div:nth-child(3) { grid-column: 2; }
       .scan-list-header > span:nth-child(4), .scan-row > div:nth-child(4) { grid-column: 3; }
-      .scan-list-header > span:nth-child(5), .scan-row > div:nth-child(5) { grid-column: 5; }
-      .scan-list-header > span:nth-child(6), .scan-row > div:nth-child(6) { grid-column: 6; }
+      .scan-list-header > span:nth-child(5), .scan-row > div:nth-child(5) { display: none !important; }
+      .scan-list-header > span:nth-child(6), .scan-row > div:nth-child(6) { grid-column: 5; }
       .scan-list-header > span:nth-child(2) { order: 4; }
       .scan-list-header > span:nth-child(3) { order: 2; }
       .scan-list-header > span:nth-child(4) { order: 3; }
+      .scan-list-header > span:nth-child(6) { order: 5; }
+
+      /* The rate indicator is a single visual unit, centered under its header. */
+      .scan-row-bar-wrap {
+        align-items: center;
+        gap: 12px;
+      }
+      .scan-row-bar-wrap .scan-row-bar-track {
+        flex: 0 1 136px;
+        width: 136px;
+        margin: 0;
+      }
+      .scan-row-ratio {
+        min-width: 38px;
+        text-align: left;
+      }
 
       @media (max-width: 720px) {
         .scan-list-header { display: none !important; }
