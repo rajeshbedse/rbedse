@@ -50,9 +50,7 @@
       <div class="scan-list-header" role="row"><span>Date</span><span>Shortlist ratio</span><span><span class="scan-header-line">Shortlisted</span><span class="scan-header-line">Candidates</span></span><span><span class="scan-header-line">Total</span><span class="scan-header-line">Candidates</span></span><span></span><span>Research report</span></div>
       {% for d in dates %}
       {% if d.has_excel or d.has_full %}<a href="{{ url_for('scan_detail', date_str=d.date_str) }}" class="scan-row {% if loop.first %}scan-row--latest{% endif %}" role="row" aria-label="Scan {{ d.display }} — {{ d.shortlist }} shortlisted of {{ d.candidates }} candidates">{% else %}<div class="scan-row" role="row">{% endif %}
-        <div class="scan-row-date">
-          <div class="scan-row-datebox" aria-label="{{ d.weekday[:3] }} {{ d.display }}"><span class="scan-row-day">{{ d.weekday[:3] }}</span><span class="scan-row-number">{{ d.display.split(' ')[0] }}</span><span class="scan-row-month">{{ d.display.split(' ')[1:]|join(' ') }}</span></div>
-        </div>
+        <div class="scan-row-date"><div class="scan-row-datebox" aria-label="{{ d.weekday[:3] }} {{ d.display }}"><span class="scan-row-day">{{ d.weekday[:3] }}</span><span class="scan-row-number">{{ d.display.split(' ')[0] }}</span><span class="scan-row-month">{{ d.display.split(' ')[1:]|join(' ') }}</span></div></div>
         <div class="scan-row-bar-wrap">{% if d.has_excel and d.candidates > 0 %}<div class="scan-row-bar-track" aria-hidden="true"><div class="scan-row-bar-fill" style="width:{{ [((d.shortlist / d.candidates) * 100)|round|int, 100]|min }}%"></div></div><span class="scan-row-ratio">{{ [((d.shortlist / d.candidates) * 100)|round|int, 100]|min }}%</span>{% endif %}</div>
         <div class="scan-row-num scan-row-num--short">{% if d.has_excel %}{{ d.shortlist }}{% endif %}</div>
         <div class="scan-row-num scan-row-num--cand">{% if d.has_full %}{{ d.candidates }}{% endif %}</div>
