@@ -12,7 +12,7 @@
       <p class="hero-philosophy">Wealth is not built in moments of excitement — it is built in moments of <strong>clarity</strong>. We track what insiders do with their own capital, then let mathematics — not emotion — guide the decision.</p>
       <div class="hero-quote-row"><span class="hero-quote-mark">“</span><blockquote class="hero-quote">We don't predict the market.<br>We study where informed capital is moving.<cite>— RYB Finserv Research Principle</cite></blockquote></div>
       <div class="hero-cta">
-        {% if latest %}<a href="{{ url_for('scan_detail', date_str=latest.date_str) }}" class="btn btn-primary">View Latest Scan<svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7-7"/></svg></a>{% endif %}
+        {% if latest %}<a href="{{ url_for('scan_detail', date_str=latest.date_str) }}" class="btn btn-primary">View Latest Scan<svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7-7"/></svg></a>{% endif %}
       </div>
     </div>
     <div class="hero-visual">
@@ -52,12 +52,11 @@
       {% if d.has_excel or d.has_full %}<a href="{{ url_for('scan_detail', date_str=d.date_str) }}" class="scan-row {% if loop.first %}scan-row--latest{% endif %}" role="row" aria-label="Scan {{ d.display }} — {{ d.shortlist }} shortlisted of {{ d.candidates }} candidates">{% else %}<div class="scan-row" role="row">{% endif %}
         <div class="scan-row-date">
           <div class="scan-row-datebox" aria-label="{{ d.weekday[:3] }} {{ d.display }}"><span class="scan-row-day">{{ d.weekday[:3] }}</span><span class="scan-row-number">{{ d.display.split(' ')[0] }}</span><span class="scan-row-month">{{ d.display.split(' ')[1:]|join(' ') }}</span></div>
-          <div class="scan-row-status-wrap"><span class="scan-row-status">Scan completed</span><span class="scan-row-time"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>{% if d.weekday[:3] == 'SAT' %}11:00 AM IST{% else %}08:30 PM IST{% endif %}</span></div>
         </div>
         <div class="scan-row-bar-wrap">{% if d.has_excel and d.candidates > 0 %}<div class="scan-row-bar-track" aria-hidden="true"><div class="scan-row-bar-fill" style="width:{{ [((d.shortlist / d.candidates) * 100)|round|int, 100]|min }}%"></div></div><span class="scan-row-ratio">{{ [((d.shortlist / d.candidates) * 100)|round|int, 100]|min }}%</span>{% endif %}</div>
         <div class="scan-row-num scan-row-num--short">{% if d.has_excel %}{{ d.shortlist }}{% endif %}</div>
         <div class="scan-row-num scan-row-num--cand">{% if d.has_full %}{{ d.candidates }}{% endif %}</div>
-        <div>{% if loop.first %}<span class="scan-latest-label">Latest</span>{% elif not d.has_excel and not d.has_full %}<span class="scan-row-processing">Processing</span>{% endif %}</div>
+        <div>{% if loop.first %}{% elif not d.has_excel and not d.has_full %}<span class="scan-row-processing">Processing</span>{% endif %}</div>
         <div style="text-align:right">{% if d.has_excel or d.has_full %}<span class="scan-row-cta">View report <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>{% else %}<span class="scan-row-cta scan-row-cta--disabled">—</span>{% endif %}</div>
       {% if d.has_excel or d.has_full %}</a>{% else %}</div>{% endif %}
       {% endfor %}
