@@ -1,12 +1,14 @@
 name: Validate NSE Sources
 
 on:
+  push:
+    branches: ["nse-normalization"]
   workflow_dispatch:
     inputs:
       symbols:
         description: "NSE symbols, comma separated"
         required: true
-        default: "APLLTD,GANDHAR"
+        default: "APLLTD,GANDHAR,RELIANCE,ASHOKLEY,ANANTRAJ"
 
 jobs:
   validate:
@@ -27,8 +29,10 @@ jobs:
           python -m playwright install --with-deps chromium
 
       - name: Run NSE validation
+        env:
+          VALIDATION_SYMBOLS: ${{ inputs.symbols || 'APLLTD,GANDHAR,RELIANCE,ASHOKLEY,ANANTRAJ' }}
         run: |
-          IFS=',' read -ra SYMBOLS <<< "${{ inputs.symbols }}"
+          IFS=',' read -ra SYMBOLS <<< "$VALIDATION_SYMBOLS"
           xvfb-run -a python -m nse_pipeline.validate_nse_sources "${SYMBOLS[@]}"
 
       - name: Upload validation output
