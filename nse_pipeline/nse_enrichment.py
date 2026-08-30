@@ -54,9 +54,6 @@ def fetch_nse_snapshot(symbol: str) -> dict[str, Any]:
         context = browser.new_context(user_agent=USER_AGENT)
         page = context.new_page()
 
-        # Match the proven production scraper: land on an actual NSE corporate
-        # filings page, wait for its concrete selector, and only then issue API
-        # requests from the same browser context.
         page.goto(NSE_LANDING, wait_until="domcontentloaded", timeout=60_000)
         page.wait_for_selector('a[data-name="InsiderTrading"]', timeout=60_000)
         page.wait_for_timeout(2000)
@@ -68,16 +65,30 @@ def fetch_nse_snapshot(symbol: str) -> dict[str, Any]:
             "session_cookies": len(context.cookies()),
         }
 
+        # NSE's legacy financial-results endpoints stop at the pre-Integrated
+        # Filing data. Since March 2025, financial results are published under
+        # Integrated Filing - Financials. Keep the legacy calls for comparison,
+        # but make the current first-party source explicit.
         calls = {
             "shareholding": (
                 "/api/corporate-share-holdings-master",
                 {"index": "equities", "symbol": symbol},
             ),
-            "financial_results": (
+            "integrated_financials": (
+                "/api/integrated-filing-results",
+                {
+                    "index": "equities",
+                    "symbol": symbol,
+                    "type": "Integrated Filing- Financials",
+                    "page": "1",
+                    "size": "50",
+                },
+            ),
+            "financial_results_legacy": (
                 "/api/corporates-financial-results",
                 {"index": "equities", "period": "Quarterly", "symbol": symbol},
             ),
-            "results_comparison": (
+            "results_comparison_legacy": (
                 "/api/results-comparision",
                 {"symbol": symbol},
             ),
