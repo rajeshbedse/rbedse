@@ -160,7 +160,7 @@
   function explanationFor(tab, s, row) {
     const v = s ? s.note || '' : '';
     if (tab === 'promoter') {
-      if (s.label === 'Market Buy') return v ? `Promoter market purchases worth ${v.replace('bought','bought')}.` : 'Promoter market purchase detected.';
+      if (s.label === 'Market Buy') return v ? `Promoter market purchases worth ${v}.` : 'Promoter market purchase detected.';
       if (s.label === 'Multi-transaction') return `${s.triggered ? 'Multiple' : 'Only'} promoter purchase transaction${Number(row.num_buy_txn) === 1 ? '' : 's'} detected — ${Number(row.num_buy_txn || 0)} in the current scan window.`;
       if (s.label === 'High conviction') return s.triggered ? `Purchase size is meaningful relative to company size — ${v}.` : `Purchase size is below the high-conviction threshold — ${v}.`;
       if (s.label === 'Holding > 65%') return s.triggered ? `${v} promoter holding indicates high insider ownership.` : `${v} promoter holding is below the 65% signal threshold.`;
@@ -192,21 +192,21 @@
     return v;
   }
 
-  function signalList(items, tab='') {
-    return (items || []).map(s => `<li class="signal ${s.triggered ? 'on' : 'off'}"><span>${s.triggered ? '✓' : '×'}</span><div><strong>${esc(s.label)}</strong><small>${esc(explanationFor(tab, s, window.__rybDetailRow || {}))}</small></div></li>`).join('');
+  function signalList(items, tab='', row={}) {
+    return (items || []).map(s => `<li class="signal ${s.triggered ? 'on' : 'off'}"><span>${s.triggered ? '✓' : '×'}</span><div><strong>${esc(s.label)}</strong><small>${esc(explanationFor(tab, s, row))}</small></div></li>`).join('');
   }
   function metric(label, value, note='') { return `<div class="detail-metric"><span>${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<small>${esc(note)}</small>` : ''}</div>`; }
   function detailPanel(row, tab) {
     const groups = {promoter: row.promo_signals, fundamentals: row.fund_signals, technical: row.tech_signals, risk: row.risk_signals};
     if (tab === 'overview') {
-      return `<div class="detail-section"><h3>Why this stock?</h3><ul class="signal-list">${signalList([...(row.promo_signals||[]).filter(s=>s.triggered).slice(0,2), ...(row.fund_signals||[]).filter(s=>s.triggered).slice(0,2), ...(row.tech_signals||[]).filter(s=>s.triggered).slice(0,1)], 'overview') || '<li>No positive signals available.</li>'}</ul></div>
+      return `<div class="detail-section"><h3>Why this stock?</h3><ul class="signal-list">${signalList([...(row.promo_signals||[]).filter(s=>s.triggered).slice(0,2), ...(row.fund_signals||[]).filter(s=>s.triggered).slice(0,2), ...(row.tech_signals||[]).filter(s=>s.triggered).slice(0,1)], 'overview', row) || '<li>No positive signals available.</li>'}</ul></div>
       <div class="detail-section"><h3>Key fundamentals</h3><div class="detail-metric-grid">${metric('Market cap', money(row.market_cap_cr) + (row.market_cap_cr != null ? ' Cr' : ''))}${metric('P/E', num(row.pe))}${metric('Revenue growth', row.rev_growth_pct == null ? '—' : pct(row.rev_growth_pct))}${metric('PAT growth', row.pat_growth_pct == null ? '—' : pct(row.pat_growth_pct))}${metric('ROCE', row.roce_pct == null ? '—' : pct(row.roce_pct))}${metric('Debt / Equity', num(row.de_ratio))}</div></div>`;
     }
     if (tab === 'transactions') {
       const trades = row.trades || [];
       return `<div class="detail-section"><div class="section-heading-row"><div><h3>Promoter buying</h3><span>${trades.length} transaction${trades.length===1?'':'s'}</span></div></div>${trades.length ? `<div class="transaction-list">${trades.map(t=>`<article class="transaction-card"><div><strong>${esc(t['Name of Person'] || 'Promoter')}</strong><span>${esc(t['Category of Person'] || '')}</span></div><div class="transaction-grid"><div><small>Shares</small><strong>${num(t['Securities Acquired/Disposed (No.)'])}</strong></div><div><small>Value</small><strong>${money(t['Securities Acquired/Disposed (Value)'] ? Number(String(t['Securities Acquired/Disposed (Value)']).replace(/,/g,'')) : null)}</strong></div><div><small>Post holding</small><strong>${esc(t['Securities Held Post (%)'] || '—')}</strong></div><div><small>Date</small><strong>${esc(t['Date To'] || t['Date From'] || '—')}</strong></div></div>${t['Details URL'] ? `<a href="${esc(t['Details URL'])}" target="_blank" rel="noopener noreferrer">View NSE filing ↗</a>` : ''}</article>`).join('')}</div>` : '<div class="empty-detail">No transaction details available.</div>'}</div>`;
     }
-    return `<div class="detail-section"><h3>${tab === 'fundamentals' ? 'Fundamental signals' : tab === 'technical' ? 'Technical signals' : 'Risk signals'}</h3><ul class="signal-list">${signalList(groups[tab], tab) || '<li>No signal data available.</li>'}</ul></div>`;
+    return `<div class="detail-section"><h3>${tab === 'fundamentals' ? 'Fundamental signals' : tab === 'technical' ? 'Technical signals' : 'Risk signals'}</h3><ul class="signal-list">${signalList(groups[tab], tab, row) || '<li>No signal data available.</li>'}</ul></div>`;
   }
 
   function openDetail(symbol) {
