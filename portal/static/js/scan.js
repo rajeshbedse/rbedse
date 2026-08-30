@@ -186,28 +186,58 @@
       if (label === 'relative strength' || label === 'rel. strength') return v === 'N/A' ? 'Six-month return data is unavailable in this report.' : `Six-month return of ${v.replace(' ✓','')} — ${s.triggered ? 'positive price strength.' : 'weak price performance.'}`;
     }
     if (tab === 'risk') {
-      if (label === 'pledge' || label === 'promoter pledge') return s.triggered ? 'Promoter shares are pledged — this can increase financial risk.' : 'No promoter shares are pledged — no pledge-related risk identified.';
-      if (label === 'thin margin') return v === 'N/A' ? 'Operating margin data is unavailable in this report.' : `Operating margin of ${v.replace(' ✓','')} — ${s.triggered ? 'relatively thin profitability.' : 'not considered a thin-margin warning by the model.'}`;
-      if (label === 'high pe' || label === 'high p/e') return v === 'N/A' ? 'P/E data is unavailable in this report.' : `P/E of ${v.replace(' ✓','')} — ${s.triggered ? 'valuation is relatively demanding.' : 'not in the high-P/E risk zone.'}`;
+      if (label === 'no pledge' || label === 'pledge' || label === 'promoter pledge') return s.triggered ? 'Promoter shares are pledged — this can increase financial risk.' : 'No promoter shares are pledged — no pledge-related risk identified.';
+      if (label === 'opm ≥ 5%' || label === 'opm >= 5%' || label === 'thin margin') {
+        const clean = v.replace(' ✓','').trim();
+        const m = clean.match(/-?\d+(?:\.\d+)?/);
+        const opm = m ? Number(m[0]) : null;
+        if (opm == null) return 'Operating margin data is unavailable in this report.';
+        return opm >= 5 ? `Operating margin of ${opm.toFixed(1)}% — above the 5% minimum threshold.` : `Operating margin of ${opm.toFixed(1)}% — below the 5% minimum threshold and a profitability concern.`;
+      }
+      if (label === 'pe ≤ 60' || label === 'pe <= 60' || label === 'high pe' || label === 'high p/e') {
+        const clean = v.replace(' ✓','').trim();
+        const m = clean.match(/-?\d+(?:\.\d+)?/);
+        const pe = m ? Number(m[0]) : null;
+        if (pe == null) return 'P/E data is unavailable in this report.';
+        return pe <= 60 ? `P/E of ${pe.toFixed(1)} — within the 60x valuation threshold.` : `P/E of ${pe.toFixed(1)} — above the 60x threshold and a valuation risk.`;
+      }
     }
     return v;
   }
 
-  function signalList(items, tab='') {
-    return (items || []).map(s => `<li class="signal ${s.triggered ? 'on' : 'off'}"><span>${s.triggered ? '✓' : '×'}</span><div><strong>${esc(s.label)}</strong><small>${esc(explanationFor(tab, s, window.__rybDetailRow || {}))}</small></div></li>`).join('');
+  function riskDisplayState(s) {
+    const label = String(s?.label || '').trim().toLowerCase();
+    const note = String(s?.note || '');
+    if (label === 'no pledge') return !/pledged|yes/i.test(note) && !s.triggered;
+    if (label === 'opm ≥ 5%' || label === 'opm >= 5%') {
+      const m = note.match(/-?\d+(?:\.\d+)?/);
+      return m ? Number(m[0]) >= 5 : !s.triggered;
+    }
+    if (label === 'pe ≤ 60' || label === 'pe <= 60') {
+      const m = note.match(/-?\d+(?:\.\d+)?/);
+      return m ? Number(m[0]) <= 60 : !s.triggered;
+    }
+    return !s.triggered;
+  }
+
+  function signalList(items, tab='', row={}) {
+    return (items || []).map(s => {
+      const displayOn = tab === 'risk' ? riskDisplayState(s) : Boolean(s.triggered);
+      return `<li class="signal ${displayOn ? 'on' : 'off'}"><span>${displayOn ? '✓' : '×'}</span><div><strong>${esc(s.label)}</strong><small>${esc(explanationFor(tab, s, row))}</small></div></li>`;
+    }).join('');
   }
   function metric(label, value, note='') { return `<div class="detail-metric"><span>${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<small>${esc(note)}</small>` : ''}</div>`; }
   function detailPanel(row, tab) {
     const groups = {promoter: row.promo_signals, fundamentals: row.fund_signals, technical: row.tech_signals, risk: row.risk_signals};
     if (tab === 'overview') {
-      return `<div class="detail-section"><h3>Why this stock?</h3><ul class="signal-list">${signalList([...(row.promo_signals||[]).filter(s=>s.triggered).slice(0,2), ...(row.fund_signals||[]).filter(s=>s.triggered).slice(0,2), ...(row.tech_signals||[]).filter(s=>s.triggered).slice(0,1)], 'overview') || '<li>No positive signals available.</li>'}</ul></div>
+      return `<div class="detail-section"><h3>Why this stock?</h3><ul class="signal-list">${signalList([...(row.promo_signals||[]).filter(s=>s.triggered).slice(0,2), ...(row.fund_signals||[]).filter(s=>s.triggered).slice(0,2), ...(row.tech_signals||[]).filter(s=>s.triggered).slice(0,1)], 'overview', row) || '<li>No positive signals available.</li>'}</ul></div>
       <div class="detail-section"><h3>Key fundamentals</h3><div class="detail-metric-grid">${metric('Market cap', money(row.market_cap_cr) + (row.market_cap_cr != null ? ' Cr' : ''))}${metric('P/E', num(row.pe))}${metric('Revenue growth', row.rev_growth_pct == null ? '—' : pct(row.rev_growth_pct))}${metric('PAT growth', row.pat_growth_pct == null ? '—' : pct(row.pat_growth_pct))}${metric('ROCE', row.roce_pct == null ? '—' : pct(row.roce_pct))}${metric('Debt / Equity', num(row.de_ratio))}</div></div>`;
     }
     if (tab === 'transactions') {
       const trades = row.trades || [];
       return `<div class="detail-section"><div class="section-heading-row"><div><h3>Promoter buying</h3><span>${trades.length} transaction${trades.length===1?'':'s'}</span></div></div>${trades.length ? `<div class="transaction-list">${trades.map(t=>`<article class="transaction-card"><div><strong>${esc(t['Name of Person'] || 'Promoter')}</strong><span>${esc(t['Category of Person'] || '')}</span></div><div class="transaction-grid"><div><small>Shares</small><strong>${num(t['Securities Acquired/Disposed (No.)'])}</strong></div><div><small>Value</small><strong>${money(t['Securities Acquired/Disposed (Value)'] ? Number(String(t['Securities Acquired/Disposed (Value)']).replace(/,/g,'')) : null)}</strong></div><div><small>Post holding</small><strong>${esc(t['Securities Held Post (%)'] || '—')}</strong></div><div><small>Date</small><strong>${esc(t['Date To'] || t['Date From'] || '—')}</strong></div></div>${t['Details URL'] ? `<a href="${esc(t['Details URL'])}" target="_blank" rel="noopener noreferrer">View NSE filing ↗</a>` : ''}</article>`).join('')}</div>` : '<div class="empty-detail">No transaction details available.</div>'}</div>`;
     }
-    return `<div class="detail-section"><h3>${tab === 'fundamentals' ? 'Fundamental signals' : tab === 'technical' ? 'Technical signals' : 'Risk signals'}</h3><ul class="signal-list">${signalList(groups[tab], tab) || '<li>No signal data available.</li>'}</ul></div>`;
+    return `<div class="detail-section"><h3>${tab === 'fundamentals' ? 'Fundamental signals' : tab === 'technical' ? 'Technical signals' : 'Risk signals'}</h3><ul class="signal-list">${signalList(groups[tab], tab, row) || '<li>No signal data available.</li>'}</ul></div>`;
   }
 
   function openDetail(symbol) {
