@@ -1,4 +1,4 @@
-/* RYB Finserv — main.js  (site-wide: nav toggle, footer year, detail heading) */
+/* RYB Finserv — main.js  (site-wide: nav toggle, footer year) */
 (function () {
   'use strict';
 
@@ -35,28 +35,22 @@
   // Jinja injects {{ now_year }}, but keep this as a JS fallback.
 
   // ── Stock detail terminology ───────────────────────────────────────────────
-  // scan.js dynamically renders the detail panel. Keep the terminology tied
-  // to the active tab so Risk remains "Risk signals" and Promoter uses the
-  // requested "Promotor indicators" heading.
-  var detailPanel = document.getElementById('detail-panel');
-  if (detailPanel && window.MutationObserver) {
-    var syncDetailHeading = function () {
-      var activeTab = document.querySelector('.detail-tab.is-active');
-      var tabName = activeTab ? activeTab.getAttribute('data-detail-tab') : '';
-      var heading = detailPanel.querySelector('h3');
+  // scan.js owns detail-tab navigation and dynamically renders the detail panel.
+  // Update only the heading after a tab click; do not observe the panel, since
+  // changing text inside a MutationObserver would retrigger the observer.
+  document.addEventListener('click', function (e) {
+    var tab = e.target.closest ? e.target.closest('.detail-tab') : null;
+    if (!tab) return;
+
+    var tabName = tab.getAttribute('data-detail-tab') || '';
+    if (tabName !== 'promoter' && tabName !== 'risk') return;
+
+    window.setTimeout(function () {
+      var panel = document.getElementById('detail-panel');
+      if (!panel) return;
+      var heading = panel.querySelector('h3');
       if (!heading) return;
-
-      if (tabName === 'promoter') {
-        heading.textContent = 'Promotor indicators';
-      } else if (tabName === 'risk') {
-        heading.textContent = 'Risk signals';
-      }
-    };
-
-    syncDetailHeading();
-    new MutationObserver(syncDetailHeading).observe(detailPanel, {
-      childList: true,
-      subtree: true
-    });
-  }
+      heading.textContent = tabName === 'promoter' ? 'Promotor indicators' : 'Risk signals';
+    }, 0);
+  });
 })();
