@@ -35,20 +35,26 @@
   // Jinja injects {{ now_year }}, but keep this as a JS fallback.
 
   // ── Stock detail terminology ───────────────────────────────────────────────
-  // The detail panel is populated dynamically by scan.js, so observe it and
-  // rename the promoter-tab heading without changing any report data.
+  // scan.js dynamically renders the detail panel. Keep the terminology tied
+  // to the active tab so Risk remains "Risk signals" and Promoter uses the
+  // requested "Promotor indicators" heading.
   var detailPanel = document.getElementById('detail-panel');
   if (detailPanel && window.MutationObserver) {
-    var renamePromoterHeading = function () {
-      var headings = detailPanel.querySelectorAll('h3');
-      headings.forEach(function (heading) {
-        if (heading.textContent.trim() === 'Risk signals') {
-          heading.textContent = 'Promoter indicators';
-        }
-      });
+    var syncDetailHeading = function () {
+      var activeTab = document.querySelector('.detail-tab.is-active');
+      var tabName = activeTab ? activeTab.getAttribute('data-detail-tab') : '';
+      var heading = detailPanel.querySelector('h3');
+      if (!heading) return;
+
+      if (tabName === 'promoter') {
+        heading.textContent = 'Promotor indicators';
+      } else if (tabName === 'risk') {
+        heading.textContent = 'Risk signals';
+      }
     };
-    renamePromoterHeading();
-    new MutationObserver(renamePromoterHeading).observe(detailPanel, {
+
+    syncDetailHeading();
+    new MutationObserver(syncDetailHeading).observe(detailPanel, {
       childList: true,
       subtree: true
     });
