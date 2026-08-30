@@ -23,7 +23,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4 pandas openpyxl
+          pip install playwright
+          python -m playwright install --with-deps chromium
 
       - name: Run NSE validation
         run: |
