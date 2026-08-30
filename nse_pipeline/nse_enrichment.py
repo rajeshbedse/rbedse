@@ -4,20 +4,29 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlencode
 
 from playwright.sync_api import sync_playwright
 
+from .config import BROWSER_ARGS, USER_AGENT
+
 NSE_BASE = "https://www.nseindia.com"
+NSE_LANDING = (
+    "https://www.nseindia.com/companies-listing/"
+    "corporate-filings-insider-trading#"
+)
 
 
 def _browser_fetch(page: Any, path: str, params: dict[str, str]) -> Any:
-    query = "&".join(f"{k}={v}" for k, v in params.items())
-    url = f"{NSE_BASE}{path}?{query}"
+    url = f"{NSE_BASE}{path}?{urlencode(params)}"
     result = page.evaluate(
         """async (url) => {
             const r = await fetch(url, {
                 credentials: 'include',
-                headers: { 'Accept': 'application/json, text/plain, */*' }
+                headers: {
+                    'Accept': 'application/json, text/plain, */*',
+                    'Referer': window.location.href
+                }
             });
             return {status: r.status, text: await r.text()};
         }""",
@@ -32,26 +41,25 @@ def _browser_fetch(page: Any, path: str, params: dict[str, str]) -> Any:
 
 
 def fetch_nse_snapshot(symbol: str) -> dict[str, Any]:
-    """Fetch raw NSE datasets through a real Playwright NSE session.
+    """Fetch raw NSE datasets through the same browser setup as production.
 
-    The browser establishes the NSE session first. API requests are then made
-    from inside that same browser context, avoiding a fresh unauthenticated
-    requests.Session and matching the working scraper architecture.
+    The production scraper uses Chromium with BROWSER_ARGS and a visible
+    browser session because NSE rejects headless navigation in GitHub runners.
+    We intentionally mirror that setup here for validation.
     """
     symbol = symbol.upper()
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            )
-        )
+        browser = p.chromium.launch(headless=False, args=BROWSER_ARGS)
+        context = browser.new_context(user_agent=USER_AGENT)
         page = context.new_page()
-        page.goto(NSE_BASE + "/", wait_until="domcontentloaded", timeout=60_000)
-        page.wait_for_timeout(3000)
+
+        # Match the proven production scraper: land on an actual NSE corporate
+        # filings page, wait for its concrete selector, and only then issue API
+        # requests from the same browser context.
+        page.goto(NSE_LANDING, wait_until="domcontentloaded", timeout=60_000)
+        page.wait_for_selector('a[data-name="InsiderTrading"]', timeout=60_000)
+        page.wait_for_timeout(2000)
 
         snapshot: dict[str, Any] = {
             "symbol": symbol,
