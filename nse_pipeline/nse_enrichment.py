@@ -1,95 +1,89 @@
-"""NSE-first enrichment helpers used for source validation."""
+"""NSE-first enrichment helpers using the same browser-session pattern as scraper.py."""
 from __future__ import annotations
 
-import time
-from datetime import datetime
-from typing import Any, Callable
+import json
+from datetime import datetime, timezone
+from typing import Any
 
-import requests
+from playwright.sync_api import sync_playwright
 
 NSE_BASE = "https://www.nseindia.com"
-_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Connection": "keep-alive",
-}
 
 
-class NSEEnrichmentClient:
-    def __init__(self, session: requests.Session | None = None, timeout: int = 30):
-        self.session = session or requests.Session()
-        self.session.headers.update(_HEADERS)
-        self.timeout = timeout
-        self._bootstrap()
-
-    def _bootstrap(self) -> None:
-        response = self.session.get(
-            NSE_BASE + "/",
-            headers={
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Referer": NSE_BASE + "/",
-            },
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
-
-    def _get_json(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        last_error: Exception | None = None
-        for attempt in range(3):
-            try:
-                response = self.session.get(
-                    NSE_BASE + path,
-                    params=params,
-                    headers={
-                        "Accept": "application/json, text/plain, */*",
-                        "Referer": NSE_BASE + "/",
-                        "X-Requested-With": "XMLHttpRequest",
-                    },
-                    timeout=self.timeout,
-                )
-                if response.status_code == 403 and attempt < 2:
-                    time.sleep(1.5 * (attempt + 1))
-                    self._bootstrap()
-                    continue
-                response.raise_for_status()
-                return response.json()
-            except Exception as exc:
-                last_error = exc
-                if attempt < 2:
-                    time.sleep(1.5 * (attempt + 1))
-        assert last_error is not None
-        raise last_error
-
-    def shareholding(self, symbol: str, index: str = "equities") -> Any:
-        return self._get_json("/api/corporate-share-holdings-master", {"index": index, "symbol": symbol.upper()})
-
-    def financial_results(self, symbol: str, index: str = "equities", period: str = "Quarterly") -> Any:
-        return self._get_json("/api/corporates-financial-results", {"index": index, "period": period, "symbol": symbol.upper()})
-
-    def results_comparison(self, symbol: str) -> Any:
-        return self._get_json("/api/results-comparision", {"symbol": symbol.upper()})
-
-    def quote(self, symbol: str) -> Any:
-        return self._get_json("/api/quote-equity", {"symbol": symbol.upper()})
-
-
-def _capture(fn: Callable[[], Any]) -> dict[str, Any]:
+def _browser_fetch(page: Any, path: str, params: dict[str, str]) -> Any:
+    query = "&".join(f"{k}={v}" for k, v in params.items())
+    url = f"{NSE_BASE}{path}?{query}"
+    result = page.evaluate(
+        """async (url) => {
+            const r = await fetch(url, {
+                credentials: 'include',
+                headers: { 'Accept': 'application/json, text/plain, */*' }
+            });
+            return {status: r.status, text: await r.text()};
+        }""",
+        url,
+    )
+    if result["status"] >= 400:
+        raise RuntimeError(f"NSE endpoint returned HTTP {result['status']}: {path}")
     try:
-        return {"status": "ok", "data": fn()}
-    except Exception as exc:
-        return {"status": "error", "error": str(exc)}
+        return json.loads(result["text"])
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"NSE endpoint returned non-JSON response: {path}") from exc
 
 
 def fetch_nse_snapshot(symbol: str) -> dict[str, Any]:
-    """Fetch raw NSE datasets without calculations or scoring."""
-    client = NSEEnrichmentClient()
+    """Fetch raw NSE datasets through a real Playwright NSE session.
+
+    The browser establishes the NSE session first. API requests are then made
+    from inside that same browser context, avoiding a fresh unauthenticated
+    requests.Session and matching the working scraper architecture.
+    """
     symbol = symbol.upper()
-    return {
-        "symbol": symbol,
-        "retrieved_at": datetime.now().isoformat(timespec="seconds"),
-        "source": "NSE India",
-        "shareholding": _capture(lambda: client.shareholding(symbol)),
-        "financial_results": _capture(lambda: client.financial_results(symbol)),
-        "results_comparison": _capture(lambda: client.results_comparison(symbol)),
-        "quote": _capture(lambda: client.quote(symbol)),
-    }
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            )
+        )
+        page = context.new_page()
+        page.goto(NSE_BASE + "/", wait_until="domcontentloaded", timeout=60_000)
+        page.wait_for_timeout(3000)
+
+        snapshot: dict[str, Any] = {
+            "symbol": symbol,
+            "retrieved_at": datetime.now(timezone.utc).isoformat(),
+            "source": "NSE India",
+            "session_cookies": len(context.cookies()),
+        }
+
+        calls = {
+            "shareholding": (
+                "/api/corporate-share-holdings-master",
+                {"index": "equities", "symbol": symbol},
+            ),
+            "financial_results": (
+                "/api/corporates-financial-results",
+                {"index": "equities", "period": "Quarterly", "symbol": symbol},
+            ),
+            "results_comparison": (
+                "/api/results-comparision",
+                {"symbol": symbol},
+            ),
+            "quote": (
+                "/api/quote-equity",
+                {"symbol": symbol},
+            ),
+        }
+
+        for name, (path, params) in calls.items():
+            try:
+                snapshot[name] = {"status": "ok", "data": _browser_fetch(page, path, params)}
+            except Exception as exc:
+                snapshot[name] = {"status": "error", "error": str(exc)}
+
+        browser.close()
+        return snapshot
