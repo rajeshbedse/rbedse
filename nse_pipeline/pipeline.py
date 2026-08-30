@@ -23,6 +23,7 @@ from .config import (
     TRADES_CSV_FILENAME, LOG_FILENAME, USER_AGENT, BROWSER_ARGS, NSE_FILING_PERIOD,
 )
 from . import scraper, analyzer, reporter
+from . import nse_scoring_adapter
 
 # Resolve output root relative to the repo root (parent of this package),
 # regardless of which directory the user runs the exe from.
@@ -215,6 +216,13 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     # uses ClsPric. Override the analyzer's price download for this pipeline
     # run so CMP and technical calculations share the same price basis.
     analyzer._download_bhavcopy = _download_close_bhavcopy
+
+    # NSE is now the production enrichment source.  The adapter deliberately
+    # preserves analyzer._fetch_screener_data's return contract so the scoring
+    # engine remains unchanged while the data source is migrated.  The legacy
+    # Screener implementation remains in analyzer.py only as a rollback path.
+    analyzer._fetch_screener_data = nse_scoring_adapter.fetch_nse_data
+
     as_of = datetime.strptime(date_str, "%Y-%m-%d").date()
     final = analyzer.run(csv_path, full_csv, as_of_date=as_of)
 
@@ -249,6 +257,7 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
         "shortlisted"   : len(final),
         "duration_s"    : duration,
         "pipeline_version": __version__,
+        "fundamental_source": "NSE Integrated Filing/XBRL",
     }
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     log.info("meta.json → %s", meta_path)
