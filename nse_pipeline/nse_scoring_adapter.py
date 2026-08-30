@@ -63,6 +63,11 @@ def _worker(symbols: list[str], worker_id: int, total: int, counter: list[int], 
 
                 try:
                     fundamentals = normalize_symbol(page, symbol, quote=quote)
+                    if quote:
+                        metadata = quote.get("metadata") or {}
+                        pe = metadata.get("pdSymbolPe")
+                        if isinstance(pe, (int, float)):
+                            fundamentals["PE"] = float(pe)
                 except Exception as exc:
                     log.warning("[NSE-W%d] %s financials failed: %s", worker_id, symbol, exc)
                     fundamentals = {
