@@ -27,11 +27,12 @@ jobs:
 
       - name: Run NSE validation
         run: |
-          python nse_pipeline/validate_nse_sources.py --symbols "${{ inputs.symbols }}"
+          IFS=',' read -ra SYMBOLS <<< "${{ inputs.symbols }}"
+          python -m nse_pipeline.validate_nse_sources "${SYMBOLS[@]}"
 
       - name: Upload validation output
         uses: actions/upload-artifact@v4
         with:
           name: nse-validation
-          path: validation_output/
-          if-no-files-found: warn
+          path: output/nse_validation/
+          if-no-files-found: error
