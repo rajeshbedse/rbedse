@@ -6,7 +6,7 @@
   const date = root.dataset.scanDate;
   const $ = (s, c = document) => c.querySelector(s);
   const $$ = (s, c = document) => Array.from(c.querySelectorAll(s));
-  const esc = v => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const esc = v => String(v ?? '').replace(/[&<>'\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));
   const money = v => v == null || v === '' ? '—' : '₹' + Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2});
   const num = v => v == null || v === '' ? '—' : Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2});
   const pct = v => v == null || v === '' ? '—' : `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)}%`;
@@ -157,21 +157,56 @@
   $('#filter-reset').addEventListener('click', () => { setFilter('band','all'); setFilter('category','all'); render(); });
   $('#empty-reset').addEventListener('click', () => { setFilter('band','all'); setFilter('category','all'); state.search=''; $('#scan-search').value=''; render(); });
 
-  function signalList(items) {
-    return (items || []).map(s => `<li class="signal ${s.triggered ? 'on' : 'off'}"><span>${s.triggered ? '✓' : '×'}</span><div><strong>${esc(s.label)}</strong><small>${esc(s.note || '')}</small></div></li>`).join('');
+  function explanationFor(tab, s, row) {
+    const v = s ? s.note || '' : '';
+    if (tab === 'promoter') {
+      if (s.label === 'Market Buy') return v ? `Promoter market purchases worth ${v.replace('bought','bought')}.` : 'Promoter market purchase detected.';
+      if (s.label === 'Multi-transaction') return `${s.triggered ? 'Multiple' : 'Only'} promoter purchase transaction${Number(row.num_buy_txn) === 1 ? '' : 's'} detected — ${Number(row.num_buy_txn || 0)} in the current scan window.`;
+      if (s.label === 'High conviction') return s.triggered ? `Purchase size is meaningful relative to company size — ${v}.` : `Purchase size is below the high-conviction threshold — ${v}.`;
+      if (s.label === 'Holding > 65%') return s.triggered ? `${v} promoter holding indicates high insider ownership.` : `${v} promoter holding is below the 65% signal threshold.`;
+      if (s.label === 'No insider sell') return s.triggered ? 'No promoter/insider market selling was detected.' : 'Promoter/insider market selling was detected.';
+      if (s.label === 'No pledge') return s.triggered ? 'No promoter shares are pledged.' : 'Promoter shares are pledged.';
+    }
+    if (tab === 'fundamentals') {
+      if (s.label === 'Revenue growth') return v === 'N/A' ? 'YoY revenue growth data is unavailable in this report.' : `YoY revenue growth of ${v.replace(' ✓','')} — ${s.triggered ? 'strong top-line expansion.' : 'below the 15% signal threshold.'}`;
+      if (s.label === 'EBITDA growth') return v === 'N/A' ? 'YoY EBITDA growth data is unavailable in this report.' : `YoY EBITDA growth of ${v.replace(' ✓','')} — ${s.triggered ? 'strong operating profit expansion.' : 'below the 15% signal threshold.'}`;
+      if (s.label === 'PAT growth') return v === 'N/A' ? 'YoY PAT growth data is unavailable in this report.' : `YoY PAT growth of ${v.replace(' ✓','')} — ${s.triggered ? 'strong earnings expansion.' : 'below the 15% signal threshold.'}`;
+      if (s.label === 'EPS growth') return v === 'N/A' ? 'YoY EPS growth data is unavailable in this report.' : `YoY EPS growth of ${v.replace(' ✓','')} — ${s.triggered ? 'healthy earnings-per-share expansion.' : 'below the 15% signal threshold.'}`;
+      if (s.label === 'ROCE') return v === 'N/A' ? 'ROCE data is unavailable in this report.' : `ROCE of ${v.replace(' ✓','')} — ${s.triggered ? 'strong capital efficiency.' : 'below the 15% signal threshold.'}`;
+      if (s.label === 'Debt / Equity') return v === 'N/A' ? 'Debt/Equity data is unavailable in this report.' : `Debt/Equity of ${v.replace(' ✓','')} — ${s.triggered ? 'relatively low leverage.' : 'above the 0.5 signal threshold.'}`;
+      if (s.label === 'Positive OCF') return s.triggered ? 'Operating cash flow is positive — the business is generating cash from operations.' : 'Operating cash flow is not positive in the reported period.';
+    }
+    if (tab === 'technical') {
+      if (s.label === 'Price above promoter reference') return s.triggered ? `CMP is ${v.replace(' ✓','')} — trading above the promoter reference price.` : `CMP is ${v.replace(' ✓','')} — trading below the promoter reference price.`;
+      if (s.label === 'Above 50-DMA') return s.triggered ? `${v.replace(' ✓','')} — short-term price trend is positive.` : `${v.replace(' ✓','')} — short-term price trend remains weak.`;
+      if (s.label === 'Above 200-DMA') return s.triggered ? `${v.replace(' ✓','')} — longer-term price trend is positive.` : `${v.replace(' ✓','')} — longer-term trend remains under pressure.`;
+      if (s.label === 'Golden cross') return s.triggered ? '50-DMA is above 200-DMA — bullish long-term trend configuration.' : '50-DMA is not above 200-DMA — no golden-cross confirmation yet.';
+      if (s.label === 'Volume expansion') return s.triggered ? 'Recent trading volume has expanded — stronger market participation.' : 'No significant volume expansion is detected.';
+      if (s.label === 'Relative strength') return v === 'N/A' ? 'Six-month return data is unavailable in this report.' : `Six-month return of ${v.replace(' ✓','')} — ${s.triggered ? 'positive price strength.' : 'weak price performance.'}`;
+    }
+    if (tab === 'risk') {
+      if (s.label === 'Pledge') return s.triggered ? 'Promoter shares are pledged — this can increase financial risk.' : 'No promoter shares are pledged — no pledge-related risk identified.';
+      if (s.label === 'Thin margin') return v === 'N/A' ? 'Operating margin data is unavailable in this report.' : `Operating margin of ${v.replace(' ✓','')} — ${s.triggered ? 'relatively thin profitability.' : 'not considered a thin-margin warning by the model.'}`;
+      if (s.label === 'High PE') return v === 'N/A' ? 'P/E data is unavailable in this report.' : `P/E of ${v.replace(' ✓','')} — ${s.triggered ? 'valuation is relatively demanding.' : 'not in the high-P/E risk zone.'}`;
+    }
+    return v;
+  }
+
+  function signalList(items, tab='') {
+    return (items || []).map(s => `<li class="signal ${s.triggered ? 'on' : 'off'}"><span>${s.triggered ? '✓' : '×'}</span><div><strong>${esc(s.label)}</strong><small>${esc(explanationFor(tab, s, window.__rybDetailRow || {}))}</small></div></li>`).join('');
   }
   function metric(label, value, note='') { return `<div class="detail-metric"><span>${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<small>${esc(note)}</small>` : ''}</div>`; }
   function detailPanel(row, tab) {
     const groups = {promoter: row.promo_signals, fundamentals: row.fund_signals, technical: row.tech_signals, risk: row.risk_signals};
     if (tab === 'overview') {
-      return `<div class="detail-section"><h3>Why this stock?</h3><ul class="signal-list">${signalList([...(row.promo_signals||[]).filter(s=>s.triggered).slice(0,2), ...(row.fund_signals||[]).filter(s=>s.triggered).slice(0,2), ...(row.tech_signals||[]).filter(s=>s.triggered).slice(0,1)]) || '<li>No positive signals available.</li>'}</ul></div>
+      return `<div class="detail-section"><h3>Why this stock?</h3><ul class="signal-list">${signalList([...(row.promo_signals||[]).filter(s=>s.triggered).slice(0,2), ...(row.fund_signals||[]).filter(s=>s.triggered).slice(0,2), ...(row.tech_signals||[]).filter(s=>s.triggered).slice(0,1)], 'overview') || '<li>No positive signals available.</li>'}</ul></div>
       <div class="detail-section"><h3>Key fundamentals</h3><div class="detail-metric-grid">${metric('Market cap', money(row.market_cap_cr) + (row.market_cap_cr != null ? ' Cr' : ''))}${metric('P/E', num(row.pe))}${metric('Revenue growth', row.rev_growth_pct == null ? '—' : pct(row.rev_growth_pct))}${metric('PAT growth', row.pat_growth_pct == null ? '—' : pct(row.pat_growth_pct))}${metric('ROCE', row.roce_pct == null ? '—' : pct(row.roce_pct))}${metric('Debt / Equity', num(row.de_ratio))}</div></div>`;
     }
     if (tab === 'transactions') {
       const trades = row.trades || [];
       return `<div class="detail-section"><div class="section-heading-row"><div><h3>Promoter buying</h3><span>${trades.length} transaction${trades.length===1?'':'s'}</span></div></div>${trades.length ? `<div class="transaction-list">${trades.map(t=>`<article class="transaction-card"><div><strong>${esc(t['Name of Person'] || 'Promoter')}</strong><span>${esc(t['Category of Person'] || '')}</span></div><div class="transaction-grid"><div><small>Shares</small><strong>${num(t['Securities Acquired/Disposed (No.)'])}</strong></div><div><small>Value</small><strong>${money(t['Securities Acquired/Disposed (Value)'] ? Number(String(t['Securities Acquired/Disposed (Value)']).replace(/,/g,'')) : null)}</strong></div><div><small>Post holding</small><strong>${esc(t['Securities Held Post (%)'] || '—')}</strong></div><div><small>Date</small><strong>${esc(t['Date To'] || t['Date From'] || '—')}</strong></div></div>${t['Details URL'] ? `<a href="${esc(t['Details URL'])}" target="_blank" rel="noopener noreferrer">View NSE filing ↗</a>` : ''}</article>`).join('')}</div>` : '<div class="empty-detail">No transaction details available.</div>'}</div>`;
     }
-    return `<div class="detail-section"><h3>${tab === 'fundamentals' ? 'Fundamental signals' : tab === 'technical' ? 'Technical signals' : 'Risk signals'}</h3><ul class="signal-list">${signalList(groups[tab])}</ul></div>`;
+    return `<div class="detail-section"><h3>${tab === 'fundamentals' ? 'Fundamental signals' : tab === 'technical' ? 'Technical signals' : 'Risk signals'}</h3><ul class="signal-list">${signalList(groups[tab], tab) || '<li>No signal data available.</li>'}</ul></div>`;
   }
 
   function openDetail(symbol) {
@@ -189,9 +224,10 @@
       $('#detail-price-grid').innerHTML = `${metric('CMP', money(row.last_price))}${metric('Promoter reference', money(row.avg_price))}${metric('vs reference', pct(row.price_diff_pct))}${metric('Promoter holding', row.promo_holding == null ? '—' : num(row.promo_holding)+'%')}${metric('Buying value', crMoney(row.value_cr))}${metric('Transactions', row.num_buy_txn || 0)}`;
       const positives = [...(row.promo_signals||[]), ...(row.fund_signals||[]), ...(row.tech_signals||[])].filter(s=>s.triggered).slice(0,5);
       $('#detail-why').innerHTML = `<div><span class="why-eyebrow">WHY THIS STOCK?</span><strong>${esc(row.category || 'Research candidate')}</strong></div><ul>${positives.map(s=>`<li>✓ ${esc(s.label)}</li>`).join('')}</ul>`;
+      window.__rybDetailRow = row;
       $$('.detail-tab').forEach(t=>{t.classList.toggle('is-active',t.dataset.detailTab==='overview');t.setAttribute('aria-selected',t.dataset.detailTab==='overview'?'true':'false');});
       $('#detail-panel').innerHTML = detailPanel(row,'overview');
-      $$('.detail-tab').forEach(t=>t.onclick=()=>{ $$('.detail-tab').forEach(x=>{x.classList.remove('is-active');x.setAttribute('aria-selected','false')}); t.classList.add('is-active');t.setAttribute('aria-selected','true');$('#detail-panel').innerHTML=detailPanel(row,t.dataset.detailTab); });
+      $$('.detail-tab').forEach(t=>t.onclick=()=>{ $$('.detail-tab').forEach(x=>{x.classList.remove('is-active');x.setAttribute('aria-selected','false')}); t.classList.add('is-active');t.setAttribute('aria-selected','true');window.__rybDetailRow=row;$('#detail-panel').innerHTML=detailPanel(row,t.dataset.detailTab); });
       $('#detail-back').focus();
     }).catch(e => { console.error(e); $('#detail-loading').textContent = 'Unable to load this stock analysis. Please try again.'; });
   }
