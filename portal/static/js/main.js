@@ -1,4 +1,4 @@
-/* RYB Finserv — main.js  (site-wide: nav toggle, footer year) */
+/* RYB Finserv — main.js  (site-wide: nav toggle, footer year, detail heading) */
 (function () {
   'use strict';
 
@@ -33,4 +33,24 @@
 
   // ── Current year in footer ─────────────────────────────────────────────────
   // Jinja injects {{ now_year }}, but keep this as a JS fallback.
+
+  // ── Stock detail terminology ───────────────────────────────────────────────
+  // The detail panel is populated dynamically by scan.js, so observe it and
+  // rename the promoter-tab heading without changing any report data.
+  var detailPanel = document.getElementById('detail-panel');
+  if (detailPanel && window.MutationObserver) {
+    var renamePromoterHeading = function () {
+      var headings = detailPanel.querySelectorAll('h3');
+      headings.forEach(function (heading) {
+        if (heading.textContent.trim() === 'Risk signals') {
+          heading.textContent = 'Promoter indicators';
+        }
+      });
+    };
+    renamePromoterHeading();
+    new MutationObserver(renamePromoterHeading).observe(detailPanel, {
+      childList: true,
+      subtree: true
+    });
+  }
 })();
