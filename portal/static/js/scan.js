@@ -158,51 +158,45 @@
   $('#empty-reset').addEventListener('click', () => { setFilter('band','all'); setFilter('category','all'); state.search=''; $('#scan-search').value=''; render(); });
 
   function explanationFor(tab, s, row) {
-    const v = s ? s.note || '' : '';
+    const v = s ? String(s.note || '').replace(/\s*✓\s*$/, '').trim() : '';
     const label = String(s?.label || '').trim().toLowerCase();
+    const reported = v && v !== 'N/A' ? ` Reported value: ${v}.` : '';
+
     if (tab === 'promoter') {
-      if (label === 'market buy') return v ? `Promoter market purchases worth ${v}.` : 'Promoter market purchase detected.';
-      if (label === 'multi-transaction') return `${s.triggered ? 'Multiple' : 'Only'} promoter purchase transaction${Number(row.num_buy_txn) === 1 ? '' : 's'} detected — ${Number(row.num_buy_txn || 0)} in the current scan window.`;
-      if (label === 'high conviction') return s.triggered ? `Purchase size is meaningful relative to company size — ${v}.` : `Purchase size is below the high-conviction threshold — ${v}.`;
-      if (label === 'holding > 65%') return s.triggered ? `${v} promoter holding indicates high insider ownership.` : `${v} promoter holding is below the 65% signal threshold.`;
-      if (label === 'no insider sell') return s.triggered ? 'No promoter/insider market selling was detected.' : 'Promoter/insider market selling was detected.';
-      if (label === 'no pledge') return s.triggered ? 'No promoter shares are pledged.' : 'Promoter shares are pledged.';
+      if (label === 'market buy') return `Shows the value of shares promoters bought through market transactions.${reported}`;
+      if (label === 'multi-transaction') return `Shows whether promoters made repeated purchases rather than a single transaction.${row.num_buy_txn != null ? ` ${Number(row.num_buy_txn)} purchase transaction${Number(row.num_buy_txn) === 1 ? '' : 's'} detected.` : ''}`;
+      if (label === 'high conviction') return `Compares promoter buying with the company's market value to show the relative size of their investment.${reported}`;
+      if (label === 'holding > 65%') return `Shows the percentage of the company owned by its promoters.${reported}`;
+      if (label === 'no insider sell') return `Shows whether promoters or other insiders have been selling shares through reported market transactions.${reported}`;
+      if (label === 'no pledge') return `Shows whether promoter-owned shares have been pledged as collateral.${reported}`;
     }
+
     if (tab === 'fundamentals') {
-      if (label === 'revenue growth') return v === 'N/A' ? 'YoY revenue growth data is unavailable in this report.' : `YoY revenue growth of ${v.replace(' ✓','')} — ${s.triggered ? 'strong top-line expansion.' : 'below the 15% signal threshold.'}`;
-      if (label === 'ebitda growth') return v === 'N/A' ? 'YoY EBITDA growth data is unavailable in this report.' : `YoY EBITDA growth of ${v.replace(' ✓','')} — ${s.triggered ? 'strong operating profit expansion.' : 'below the 15% signal threshold.'}`;
-      if (label === 'pat growth') return v === 'N/A' ? 'YoY PAT growth data is unavailable in this report.' : `YoY PAT growth of ${v.replace(' ✓','')} — ${s.triggered ? 'strong earnings expansion.' : 'below the 15% signal threshold.'}`;
-      if (label === 'eps growth') return v === 'N/A' ? 'YoY EPS growth data is unavailable in this report.' : `YoY EPS growth of ${v.replace(' ✓','')} — ${s.triggered ? 'healthy earnings-per-share expansion.' : 'below the 15% signal threshold.'}`;
-      if (label === 'roce') return v === 'N/A' ? 'ROCE data is unavailable in this report.' : `ROCE of ${v.replace(' ✓','')} — ${s.triggered ? 'strong capital efficiency.' : 'below the 15% signal threshold.'}`;
-      if (label === 'debt / equity') return v === 'N/A' ? 'Debt/Equity data is unavailable in this report.' : `Debt/Equity of ${v.replace(' ✓','')} — ${s.triggered ? 'relatively low leverage.' : 'above the 0.5 signal threshold.'}`;
-      if (label === 'positive ocf') return s.triggered ? 'Operating cash flow is positive — the business is generating cash from operations.' : 'Operating cash flow is not positive in the reported period.';
+      if (label === 'revenue growth') return `Shows how quickly the company's sales are growing year over year.${reported}`;
+      if (label === 'ebitda growth') return `Shows how quickly operating profit is growing before interest, tax, depreciation and amortisation.${reported}`;
+      if (label === 'pat growth') return `Shows how quickly the company's final reported profit is growing year over year.${reported}`;
+      if (label === 'eps growth') return `Shows how quickly earnings attributable to each share are changing.${reported}`;
+      if (label === 'roce' || label === 'roce > 15%') return `Measures how efficiently the company generates operating returns from the capital invested in the business.${reported}`;
+      if (label === 'debt / equity' || label === 'd/e < 0.5') return `Shows how much debt the company uses relative to shareholders' equity; lower leverage generally means lower financial risk.${reported}`;
+      if (label === 'positive ocf') return `Shows whether the business is generating actual cash from its day-to-day operations.${reported}`;
     }
+
     if (tab === 'technical') {
-      if (label === 'price above promoter reference' || label === 'price > promoter avg') return s.triggered ? `CMP is ${v.replace(' ✓','')} — trading above the promoter reference price.` : `CMP is ${v.replace(' ✓','')} — trading below the promoter reference price.`;
-      if (label === 'above 50-dma' || label === 'price > 50 dma') return s.triggered ? `${v.replace(' ✓','')} — short-term price trend is positive.` : `${v.replace(' ✓','')} — short-term price trend remains weak.`;
-      if (label === 'above 200-dma' || label === 'price > 200 dma') return s.triggered ? `${v.replace(' ✓','')} — longer-term price trend is positive.` : `${v.replace(' ✓','')} — longer-term trend remains under pressure.`;
-      if (label === 'golden cross') return s.triggered ? '50-DMA is above 200-DMA — bullish long-term trend configuration.' : '50-DMA is not above 200-DMA — no golden-cross confirmation yet.';
-      if (label === 'volume expansion' || label === 'vol. expansion') return s.triggered ? 'Recent trading volume has expanded — stronger market participation.' : 'No significant volume expansion is detected.';
-      if (label === 'relative strength' || label === 'rel. strength') return v === 'N/A' ? 'Six-month return data is unavailable in this report.' : `Six-month return of ${v.replace(' ✓','')} — ${s.triggered ? 'positive price strength.' : 'weak price performance.'}`;
+      if (label === 'price above promoter reference' || label === 'price > promoter avg') return `Compares the current market price with the average price at which promoters bought shares.${reported}`;
+      if (label === 'above 50-dma' || label === 'price > 50 dma') return `Compares the current price with its 50-day moving average to indicate the short-term price trend.${reported}`;
+      if (label === 'above 200-dma' || label === 'price > 200 dma') return `Compares the current price with its 200-day moving average to indicate the longer-term price trend.${reported}`;
+      if (label === 'golden cross') return `Compares the 50-day and 200-day moving averages to indicate whether the longer-term price trend is strengthening.${reported}`;
+      if (label === 'volume expansion' || label === 'vol. expansion') return `Shows whether significantly more shares are being traded, indicating stronger market participation.${reported}`;
+      if (label === 'relative strength' || label === 'rel. strength') return `Shows how the stock's price has performed over the selected six-month period.${reported}`;
     }
+
     if (tab === 'risk') {
-      if (label === 'no pledge' || label === 'pledge' || label === 'promoter pledge') return s.triggered ? 'Promoter shares are pledged — this can increase financial risk.' : 'No promoter shares are pledged — no pledge-related risk identified.';
-      if (label === 'opm ≥ 5%' || label === 'opm >= 5%' || label === 'thin margin') {
-        const clean = v.replace(' ✓','').trim();
-        const m = clean.match(/-?\d+(?:\.\d+)?/);
-        const opm = m ? Number(m[0]) : null;
-        if (opm == null) return 'Operating margin data is unavailable in this report.';
-        return opm >= 5 ? `Operating margin of ${opm.toFixed(1)}% — above the 5% minimum threshold.` : `Operating margin of ${opm.toFixed(1)}% — below the 5% minimum threshold and a profitability concern.`;
-      }
-      if (label === 'pe ≤ 60' || label === 'pe <= 60' || label === 'high pe' || label === 'high p/e') {
-        const clean = v.replace(' ✓','').trim();
-        const m = clean.match(/-?\d+(?:\.\d+)?/);
-        const pe = m ? Number(m[0]) : null;
-        if (pe == null) return 'P/E data is unavailable in this report.';
-        return pe <= 60 ? `P/E of ${pe.toFixed(1)} — within the 60x valuation threshold.` : `P/E of ${pe.toFixed(1)} — above the 60x threshold and a valuation risk.`;
-      }
+      if (label === 'no pledge' || label === 'pledge' || label === 'promoter pledge') return `Shows whether promoters have pledged their shares as collateral for borrowing.${reported}`;
+      if (label === 'opm ≥ 5%' || label === 'opm >= 5%' || label === 'thin margin') return `Operating profit margin shows how much operating profit the company retains from each ₹100 of revenue before interest and tax.${reported}`;
+      if (label === 'pe ≤ 60' || label === 'pe <= 60' || label === 'high pe' || label === 'high p/e') return `P/E compares the share price with earnings per share and indicates how much investors are paying for each rupee of current earnings.${reported}`;
     }
-    return v;
+
+    return v || 'No explanatory detail is available for this parameter.';
   }
 
   function riskDisplayState(s) {
