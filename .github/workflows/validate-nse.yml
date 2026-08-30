@@ -41,3 +41,5 @@ jobs:
           name: nse-validation
           path: output/nse_validation/
           if-no-files-found: error
+
+      # Final validation run for NSE normalization changes.
