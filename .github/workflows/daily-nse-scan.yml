@@ -24,13 +24,16 @@ concurrency:
 
 jobs:
   generate-data:
+    # Production pipeline is allowed to execute only from main.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
-      - name: Checkout repository
+      - name: Checkout production branch
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Set up Python
@@ -61,12 +64,10 @@ jobs:
             echo "Run mode: manual"
             echo "Report date: $INPUT_DATE"
           elif [ "$SCHEDULE" = "30 9 * * 2-6" ]; then
-            # Morning run: always refresh the previous IST calendar day.
             echo "run_date=$(TZ=Asia/Kolkata date -d 'yesterday' +%F)" >> "$GITHUB_OUTPUT"
             echo "Run mode: morning refresh"
             echo "Report date: previous IST day"
           else
-            # Evening run: use the current IST calendar day.
             echo "run_date=$(TZ=Asia/Kolkata date +%F)" >> "$GITHUB_OUTPUT"
             echo "Run mode: evening scan"
             echo "Report date: current IST day"
@@ -81,33 +82,14 @@ jobs:
       - name: Validate generated snapshot
         run: |
           RUN_DATE="${{ steps.date.outputs.run_date }}"
-
-          echo "========================================"
-          echo "Validating run date: ${RUN_DATE}"
-          echo "========================================"
-
-          echo ""
-          echo "Output directory:"
           ls -lah "output/${RUN_DATE}/"
-
-          echo ""
-          echo "meta.json:"
-          if [ -f "output/${RUN_DATE}/meta.json" ]; then
-            cat "output/${RUN_DATE}/meta.json"
-          else
-            echo "ERROR: meta.json does not exist"
-          fi
-
-          echo ""
-          echo "Running validator:"
           python -m nse_pipeline.validate_output --date "${RUN_DATE}"
 
-      - name: Publish daily snapshot to Git
+      - name: Publish daily snapshot to main only
         env:
           RUN_DATE: ${{ steps.date.outputs.run_date }}
         run: |
           STATUS=$(python -c "import json; print(json.load(open('output/${RUN_DATE}/meta.json', encoding='utf-8-sig')).get('status', 'unknown'))")
-
           echo "Snapshot status: ${STATUS}"
 
           if [ "${STATUS}" != "success" ]; then
@@ -117,7 +99,6 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           git add "output/${RUN_DATE}/"
 
           if git diff --cached --quiet; then
@@ -126,4 +107,4 @@ jobs:
           fi
 
           git commit -m "Daily NSE scan: ${RUN_DATE}"
-          git push
+          git push origin HEAD:main
