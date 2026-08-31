@@ -1,0 +1,12 @@
+{
+  "run_date": "2026-09-01",
+  "generated_at": "2026-08-31T20:49:21.848637+00:00",
+  "status": "success",
+  "filing_period": "3M",
+  "raw_filings": 3708,
+  "failed_urls": 1,
+  "candidates": 85,
+  "shortlisted": 48,
+  "duration_s": 492,
+  "pipeline_version": "1.2.1"
+}
