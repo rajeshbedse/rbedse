@@ -159,7 +159,18 @@ def run(browser_context, csv_path: Path) -> int:
     network_events.clear()
     log.info("Applying %s filter …", NSE_FILING_PERIOD)
     page.locator(f'#Insider_Trading_equity ul.dayslisting a[data-val="{NSE_FILING_PERIOD}"]').click(force=True)
-    page.wait_for_timeout(5000)
+
+    # The table is populated asynchronously. Waiting for tbody/tr alone is
+    # insufficient because NSE first renders a spinner row. Wait specifically
+    # for a real filing row containing a details link.
+    page.wait_for_function(
+        """
+        () => Array.from(
+            document.querySelectorAll('#Insider_Trading_equity tbody tr')
+        ).some(row => row.querySelector('a[href]'))
+        """,
+        timeout=30_000,
+    )
 
     log.info("NSE FILTER NETWORK DIAGNOSTIC: %s", network_events)
 
