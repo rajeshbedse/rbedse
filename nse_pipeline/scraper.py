@@ -75,7 +75,7 @@ def _parse_detail_html(html: str) -> dict:
     return {"header": header, "trades": trades}
 
 
-def _worker(rows_slice, cookies, worker_id, counter, counter_lock, total, log_every):
+def _worker(rows_slice, cookies, worker_id, counter, counter_lock, total, log_every, retry_stats, stats_lock):
     session = requests.Session()
     session.headers.update(_HEADERS)
     session.cookies.update(cookies)
@@ -87,6 +87,8 @@ def _worker(rows_slice, cookies, worker_id, counter, counter_lock, total, log_ev
                 try:
                     resp = session.get(row["detailsUrl"], timeout=SCRAPER_DETAIL_TIMEOUT)
                     if resp.status_code in _RETRYABLE_STATUS_CODES and attempt < SCRAPER_DETAIL_RETRIES:
+                        with stats_lock:
+                            retry_stats["attempts"] += 1
                         log.warning(
                             "[W%d] RETRY %s: HTTP %d (attempt %d/%d)",
                             worker_id, row["symbol"], resp.status_code,
@@ -104,7 +106,7 @@ def _worker(rows_slice, cookies, worker_id, counter, counter_lock, total, log_ev
                         "Scrip Code": header.get("Scrip Code", ""), "NSE Symbol": header.get("NSE Symbol", ""),
                         "MSEI Symbol": header.get("MSEI Symbol", ""),
                         "Name of Signatory": header.get("Name of the Signatory", ""),
-                        "Designation of Signatory": header.get("Designation of Signatory", ""),
+                        "Designation of Signatory": header.get("Designation of the Signatory", ""),
                     }
                     if trades:
                         for tr in trades:
@@ -120,6 +122,11 @@ def _worker(rows_slice, cookies, worker_id, counter, counter_lock, total, log_ev
                                 "Date of Intimation": tr["dateIntimation"], "Exchange": tr["exchange"], "Notes": tr["notes"]})
                     else:
                         records.append(base)
+                    if attempt > 1:
+                        with stats_lock:
+                            retry_stats["successes"] += 1
+                        log.info("[W%d] RETRY SUCCESS %s: completed on attempt %d/%d",
+                                 worker_id, row["symbol"], attempt, SCRAPER_DETAIL_RETRIES)
                     break
                 except requests.RequestException as exc:
                     last_exc = exc
@@ -127,6 +134,8 @@ def _worker(rows_slice, cookies, worker_id, counter, counter_lock, total, log_ev
                         isinstance(exc, requests.Timeout) or
                         getattr(exc.response, "status_code", None) in _RETRYABLE_STATUS_CODES
                     ):
+                        with stats_lock:
+                            retry_stats["attempts"] += 1
                         log.warning(
                             "[W%d] RETRY %s: %s (attempt %d/%d)",
                             worker_id, row["symbol"], exc,
@@ -139,8 +148,10 @@ def _worker(rows_slice, cookies, worker_id, counter, counter_lock, total, log_ev
                 if last_exc:
                     raise last_exc
         except Exception as exc:
+            with stats_lock:
+                retry_stats["final_failures"] += 1
             failed_urls.append(f"{row['symbol']}\t{row['detailsUrl']}\t{exc}")
-            log.warning("[W%d] SKIP %s: %s", worker_id, row["symbol"], exc)
+            log.warning("[W%d] RETRY FAILED %s: %s", worker_id, row["symbol"], exc)
         with counter_lock:
             counter[0] += 1
             done = counter[0]
@@ -257,12 +268,17 @@ def run(browser_context, csv_path: Path) -> int:
     slices = [rows_data[i::workers] for i in range(workers)]
     log.info("Fetching %d detail pages with %d parallel workers …", n, workers)
     counter, lock, log_every = [0], threading.Lock(), max(1, n // 10)
+    retry_stats, stats_lock = {"attempts": 0, "successes": 0, "final_failures": 0}, threading.Lock()
     all_records, all_failed = [], []
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {wid: pool.submit(_worker, s, cookies, wid, counter, lock, n, log_every) for wid, s in enumerate(slices)}
+        futures = {wid: pool.submit(_worker, s, cookies, wid, counter, lock, n, log_every, retry_stats, stats_lock) for wid, s in enumerate(slices)}
         for wid in range(workers):
             records, failed = futures[wid].result()
             all_records.extend(records); all_failed.extend(failed)
+    log.info(
+        "Phase 1 retry summary — retry attempts: %d | retry recoveries: %d | final failures: %d",
+        retry_stats["attempts"], retry_stats["successes"], retry_stats["final_failures"],
+    )
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS, extrasaction="ignore")
