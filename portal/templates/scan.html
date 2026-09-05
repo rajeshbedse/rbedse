@@ -1,132 +1,17 @@
 {% extends "base.html" %}
-
 {% block title %}Report {{ display_date }} — RYB Finserv{% endblock %}
 {% block meta_desc %}RYB Finserv research report for {{ display_date }}. {{ shortlist_count }} quality-screened stocks.{% endblock %}
-
 {% block content %}
 <div class="scan-page" data-scan-date="{{ date_str }}">
-  <div class="page-header scan-header">
-    <div class="container">
-      <nav class="breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ url_for('index') }}" class="bc-link">Dashboard</a>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-        <span class="bc-current" aria-current="page">{{ display_date }}</span>
-      </nav>
-      <div class="page-header-content">
-        <div>
-          <h1 class="page-title"><span class="page-title-weekday">{{ weekday }}</span>{{ display_date }}</h1>
-          <p class="page-sub">Promoter buying research · Explore the strongest setups first</p>
-        </div>
-        <div class="page-header-stats scan-stats">
-          <div class="stat-block"><span class="stat-num">{{ shortlist_count }}</span><span class="stat-lbl">Shortlist</span></div>
-          <div class="stat-block"><span class="stat-num">{{ reviewed_count }}</span><span class="stat-lbl">Reviewed</span></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
+  <div class="page-header scan-header"><div class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="{{ url_for('index') }}" class="bc-link">Dashboard</a><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg><span class="bc-current" aria-current="page">{{ display_date }}</span></nav><div class="page-header-content"><div><h1 class="page-title"><span class="page-title-weekday">{{ weekday }}</span>{{ display_date }}</h1><p class="page-sub">Promoter buying research · Explore the strongest setups first</p></div><div class="page-header-stats scan-stats"><div class="stat-block"><span class="stat-num">{{ shortlist_count }}</span><span class="stat-lbl">Shortlist</span></div><div class="stat-block"><span class="stat-num">{{ reviewed_count }}</span><span class="stat-lbl">Reviewed</span></div></div></div></div></div>
   <main class="container section scan-shell">
-    <div class="scan-tabs" role="tablist" aria-label="Scan result views">
-      <button class="scan-tab is-active" role="tab" aria-selected="true" aria-controls="scan-panel" data-view="shortlist">
-        Shortlist <span class="scan-tab-count">{{ shortlist_count }}</span>
-      </button>
-      <button class="scan-tab" role="tab" aria-selected="false" aria-controls="scan-panel" data-view="candidates">
-        All Reviewed <span class="scan-tab-count">{{ reviewed_count }}</span>
-      </button>
-    </div>
-
-    <section class="scan-toolbar" aria-label="Scan controls">
-      <div class="scan-search-wrap">
-        <svg class="scan-search-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input id="scan-search" type="search" autocomplete="off" placeholder="Search stock or company…" aria-label="Search stocks" />
-        <button id="clear-search" class="icon-btn" type="button" aria-label="Clear search" hidden>×</button>
-      </div>
-      <button id="filter-toggle" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filter-sheet">
-        <span aria-hidden="true">☷</span> Filters <span id="filter-count" class="filter-count" hidden>0</span>
-      </button>
-      <label class="sort-select-wrap" for="scan-sort">Sort
-        <select id="scan-sort" aria-label="Sort results">
-          <option value="score-desc">Score: high to low</option>
-          <option value="value-desc">Promoter buying: high to low</option>
-          <option value="diff-asc">Price vs reference: low to high</option>
-          <option value="diff-desc">Price vs reference: high to low</option>
-          <option value="symbol-asc">Symbol: A–Z</option>
-          <option value="date-desc" selected>Latest buying first</option>
-        </select>
-      </label>
-    </section>
-
-    <section id="filter-sheet" class="filter-sheet" aria-label="Filters" hidden>
-      <div class="filter-sheet-head"><div><strong>Refine results</strong><span>Use one or more filters</span></div><button id="filter-close" class="icon-btn" type="button" aria-label="Close filters">×</button></div>
-      <div class="filter-group"><span class="filter-label">Price vs promoter reference</span><div class="filter-options" data-filter-group="band">
-        <button class="filter-option is-active" data-filter="band" data-value="all">All</button>
-        <button class="filter-option" data-filter="band" data-value="below">Below reference</button>
-        <button class="filter-option" data-filter="band" data-value="within10">0–10%</button>
-        <button class="filter-option" data-filter="band" data-value="within20">11–20%</button>
-        <button class="filter-option" data-filter="band" data-value="within30">21–30%</button>
-        <button class="filter-option" data-filter="band" data-value="beyond30">&gt;30%</button>
-      </div></div>
-      <div class="filter-group"><span class="filter-label">Category</span><div class="filter-options" data-filter-group="category">
-        <button class="filter-option is-active" data-filter="category" data-value="all">All</button>
-        <button class="filter-option" data-filter="category" data-value="Strong Buy Setup">Strong Buy</button>
-        <button class="filter-option" data-filter="category" data-value="Buy on Breakout">Breakout</button>
-        <button class="filter-option" data-filter="category" data-value="Watchlist">Watchlist</button>
-        <button class="filter-option" data-filter="category" data-value="Fundamental Watch">Fundamental Watch</button>
-        <button class="filter-option" data-filter="category" data-value="Avoid">Avoid</button>
-      </div></div>
-      <div class="filter-sheet-actions"><button id="filter-reset" class="btn-secondary" type="button">Clear all</button><button id="filter-apply" class="btn-primary" type="button">Apply filters</button></div>
-    </section>
-
-    <div class="scan-results-head"><div><strong id="result-count">Loading…</strong><span id="result-note"></span></div></div>
-
-    <div id="scan-loading" class="scan-loading" aria-live="polite"><span class="loading-spinner" aria-hidden="true"></span> Loading scan results…</div>
-    <div id="scan-error" class="scan-error" hidden role="alert"><strong>Couldn't load this scan.</strong><span>Please refresh the page and try again.</span></div>
-
-    <section id="scan-panel" role="tabpanel" aria-label="Scan results">
-      <div id="stock-cards" class="stock-cards"></div>
-      <div class="desktop-table-wrap">
-        <table id="scan-table" class="research-table" aria-label="Stock scan results">
-          <thead><tr>
-            <th>Stock</th><th>Score</th><th>Setup</th><th>CMP</th><th>Ref.</th><th>Δ%</th><th>Promoter</th><th>Buy value</th><th>Date</th><th></th>
-          </tr></thead>
-          <tbody id="scan-tbody"></tbody>
-        </table>
-      </div>
-      <div id="scan-empty" class="scan-empty" hidden><div class="scan-empty-icon">⌕</div><strong>No stocks match these filters</strong><span>Try clearing a filter or searching for another symbol.</span><button id="empty-reset" class="btn-secondary" type="button">Clear filters</button></div>
-    </section>
+    <div class="scan-tabs" role="tablist" aria-label="Scan result views"><button class="scan-tab is-active" role="tab" aria-selected="true" aria-controls="scan-panel" data-view="shortlist">Shortlist <span class="scan-tab-count">{{ shortlist_count }}</span></button><button class="scan-tab" role="tab" aria-selected="false" aria-controls="scan-panel" data-view="candidates">All Reviewed <span class="scan-tab-count">{{ reviewed_count }}</span></button></div>
+    <section class="scan-toolbar" aria-label="Scan controls"><div class="scan-search-wrap"><svg class="scan-search-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="scan-search" type="search" autocomplete="off" placeholder="Search stock or company…" aria-label="Search stocks" /><button id="clear-search" class="icon-btn" type="button" aria-label="Clear search" hidden>×</button></div><button id="filter-toggle" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filter-sheet"><span aria-hidden="true">☷</span> Filters <span id="filter-count" class="filter-count" hidden>0</span></button><label class="sort-select-wrap" for="scan-sort">Sort<select id="scan-sort" aria-label="Sort results"><option value="score-desc">Score: high to low</option><option value="value-desc">Promoter buying: high to low</option><option value="diff-asc">Price vs reference: low to high</option><option value="diff-desc">Price vs reference: high to low</option><option value="symbol-asc">Symbol: A–Z</option><option value="date-desc" selected>Latest buying first</option></select></label></section>
+    <section id="filter-sheet" class="filter-sheet" aria-label="Filters" hidden><div class="filter-sheet-head"><div><strong>Refine results</strong><span>Use one or more filters</span></div><button id="filter-close" class="icon-btn" type="button" aria-label="Close filters">×</button></div><div class="filter-group"><span class="filter-label">Price vs promoter reference</span><div class="filter-options" data-filter-group="band"><button class="filter-option is-active" data-filter="band" data-value="all">All</button><button class="filter-option" data-filter="band" data-value="below">Below reference</button><button class="filter-option" data-filter="band" data-value="within10">0–10%</button><button class="filter-option" data-filter="band" data-value="within20">11–20%</button><button class="filter-option" data-filter="band" data-value="within30">21–30%</button><button class="filter-option" data-filter="band" data-value="beyond30">&gt;30%</button></div></div><div class="filter-group"><span class="filter-label">Category</span><div class="filter-options" data-filter-group="category"><button class="filter-option is-active" data-filter="category" data-value="all">All</button><button class="filter-option" data-filter="category" data-value="Strong Buy Setup">Strong Buy</button><button class="filter-option" data-filter="category" data-value="Buy on Breakout">Breakout</button><button class="filter-option" data-filter="category" data-value="Watchlist">Watchlist</button><button class="filter-option" data-filter="category" data-value="Fundamental Watch">Fundamental Watch</button><button class="filter-option" data-filter="category" data-value="Avoid">Avoid</button></div></div><div class="filter-sheet-actions"><button id="filter-reset" class="btn-secondary" type="button">Clear all</button><button id="filter-apply" class="btn-primary" type="button">Apply filters</button></div></section>
+    <div class="scan-results-head"><div><strong id="result-count">Loading…</strong><span id="result-note"></span></div></div><div id="scan-loading" class="scan-loading" aria-live="polite"><span class="loading-spinner" aria-hidden="true"></span> Loading scan results…</div><div id="scan-error" class="scan-error" hidden role="alert"><strong>Couldn't load this scan.</strong><span>Please refresh the page and try again.</span></div>
+    <section id="scan-panel" role="tabpanel" aria-label="Scan results"><div id="stock-cards" class="stock-cards"></div><div class="desktop-table-wrap"><table id="scan-table" class="research-table" aria-label="Stock scan results"><thead><tr><th>Stock</th><th>Score</th><th>Setup</th><th>CMP</th><th>Ref.</th><th>Δ%</th><th>Promoter</th><th>Buy value</th><th>Date</th><th></th></tr></thead><tbody id="scan-tbody"></tbody></table></div><div id="scan-empty" class="scan-empty" hidden><div class="scan-empty-icon">⌕</div><strong>No stocks match these filters</strong><span>Try clearing a filter or searching for another symbol.</span><button id="empty-reset" class="btn-secondary" type="button">Clear filters</button></div></section>
   </main>
 </div>
-
-<!-- Stock detail: modal on desktop, full-screen research view on mobile -->
-<div id="stock-modal" class="stock-modal" hidden aria-hidden="true">
-  <div class="stock-modal-backdrop" data-close-modal></div>
-  <section class="stock-detail" role="dialog" aria-modal="true" aria-labelledby="detail-title">
-    <header class="stock-detail-header">
-      <button id="detail-back" class="detail-back" type="button"><span aria-hidden="true">←</span> Back to results</button>
-      <a id="detail-nse" class="detail-nse-link" href="#" target="_blank" rel="noopener noreferrer">NSE ↗</a>
-    </header>
-    <div id="detail-loading" class="detail-loading"><span class="loading-spinner" aria-hidden="true"></span> Loading analysis…</div>
-    <div id="detail-content" hidden>
-      <div class="detail-hero">
-        <div><span id="detail-category" class="detail-category"></span><h2 id="detail-title"></h2><p id="detail-company"></p></div>
-        <div class="detail-score-block"><div class="detail-score"><span id="detail-score">—</span><small>/100</small><span>RYB Score</span></div><div id="detail-score-meter"></div></div>
-      </div>
-      <div id="detail-why" class="why-card"></div>
-      <div class="detail-price-grid" id="detail-price-grid"></div>
-      <div class="detail-tabs" role="tablist" aria-label="Stock analysis sections">
-        <button class="detail-tab is-active" data-detail-tab="overview" role="tab" aria-selected="true">Overview</button>
-        <button class="detail-tab" data-detail-tab="promoter" role="tab" aria-selected="false">Promoter</button>
-        <button class="detail-tab" data-detail-tab="fundamentals" role="tab" aria-selected="false">Fundamentals</button>
-        <button class="detail-tab" data-detail-tab="technical" role="tab" aria-selected="false">Technical</button>
-        <button class="detail-tab" data-detail-tab="risk" role="tab" aria-selected="false">Risk</button>
-        <button class="detail-tab" data-detail-tab="transactions" role="tab" aria-selected="false">Transactions</button>
-      </div>
-      <div id="detail-panel" class="detail-panel"></div>
-    </div>
-  </section>
-</div>
+<div id="stock-modal" class="stock-modal" hidden aria-hidden="true"><div class="stock-modal-backdrop" data-close-modal></div><section class="stock-detail" role="dialog" aria-modal="true" aria-labelledby="detail-title"><header class="stock-detail-header"><button id="detail-back" class="detail-back" type="button"><span aria-hidden="true">←</span> Back to results</button><a id="detail-nse" class="detail-nse-link" href="#" target="_blank" rel="noopener noreferrer">NSE ↗</a></header><div id="detail-loading" class="detail-loading"><span class="loading-spinner" aria-hidden="true"></span> Loading analysis…</div><div id="detail-content" hidden><div class="detail-hero"><div><span id="detail-category" class="detail-category"></span><h2 id="detail-title"></h2><p id="detail-company"></p></div><div class="detail-score-block"><div class="detail-score"><span id="detail-score">—</span><small>/100</small><span>RYB Score</span></div><div id="detail-score-meter"></div></div></div><div id="detail-why" class="why-card"></div><div class="detail-price-grid" id="detail-price-grid"></div><div class="detail-tabs" role="tablist" aria-label="Stock analysis sections"><button class="detail-tab is-active" data-detail-tab="overview" role="tab" aria-selected="true">Overview</button><button class="detail-tab" data-detail-tab="promoter" role="tab" aria-selected="false">Promoter</button><button class="detail-tab" data-detail-tab="fundamentals" role="tab" aria-selected="false">Fundamentals</button><button class="detail-tab" data-detail-tab="technical" role="tab" aria-selected="false">Technical</button><button class="detail-tab" data-detail-tab="risk" role="tab" aria-selected="false">Risk</button><button class="detail-tab" data-detail-tab="transactions" role="tab" aria-selected="false">Transactions</button></div><div id="detail-panel" class="detail-panel"></div></div></section></div>
 {% endblock %}
-
-{% block scripts %}
-<script src="{{ url_for('static', filename='js/scan.js') }}?v={{ scan_js_version }}" defer></script>
-{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/scan.js') }}?v={{ scan_js_version }}" defer></script><script src="{{ url_for('static', filename='js/timing-enhancement.js') }}?v={{ scan_js_version }}" defer></script>{% endblock %}
