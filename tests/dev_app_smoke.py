@@ -104,13 +104,22 @@ def browser_checks(base_url: str, home_budget: float) -> None:
     console_errors: list[str] = []
     page_errors: list[str] = []
     failed_requests: list[str] = []
+    app_origin = base_url.rstrip("/")
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page()
         page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
         page.on("pageerror", lambda exc: page_errors.append(str(exc)))
-        page.on("requestfailed", lambda req: failed_requests.append(f"{req.method} {req.url}: {req.failure}"))
+
+        # Only application-origin request failures are test failures. Third-party
+        # telemetry/analytics requests can be intentionally blocked or aborted by
+        # browsers and are outside the application's functional contract.
+        def record_failed_request(req) -> None:
+            if req.url.startswith(app_origin + "/") or req.url == app_origin:
+                failed_requests.append(f"{req.method} {req.url}: {req.failure}")
+
+        page.on("requestfailed", record_failed_request)
 
         start = time.perf_counter()
         response = page.goto(base_url + "/", wait_until="domcontentloaded", timeout=30_000)
@@ -210,7 +219,7 @@ def browser_checks(base_url: str, home_budget: float) -> None:
         if console_errors or page_errors:
             fail("Browser JavaScript errors: " + " | ".join(console_errors + page_errors)[:2000])
         if failed_requests:
-            fail("Browser request failures: " + " | ".join(failed_requests)[:2000])
+            fail("Browser application request failures: " + " | ".join(failed_requests)[:2000])
 
         browser.close()
 
