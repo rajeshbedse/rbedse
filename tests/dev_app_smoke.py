@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DEV-only RYB Finserv application/UI smoke, regression and performance checks."""
+"""DEV-only RYB Finserv application/UI regression and performance test pack."""
 from __future__ import annotations
 
 import argparse
@@ -11,6 +11,7 @@ import requests
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 DEFAULT_BASE_URL = "https://ryb-finserv-dev.onrender.com"
+RETRYABLE_STATUS = {408, 429, 500, 502, 503, 504}
 
 
 def fail(message: str) -> None:
@@ -18,9 +19,32 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
+def request_with_retries(session: requests.Session, method: str, url: str, *, attempts: int = 3, timeout: float = 20, **kwargs):
+    """Make an HTTP request resilient to transient runner/Render failures."""
+    last_exc = None
+    for attempt in range(1, attempts + 1):
+        try:
+            response = session.request(method, url, timeout=timeout, **kwargs)
+            if response.status_code not in RETRYABLE_STATUS or attempt == attempts:
+                return response
+            print(f"HTTP retry {attempt}/{attempts - 1}: {response.status_code} {url}")
+        except requests.RequestException as exc:
+            last_exc = exc
+            if attempt == attempts:
+                raise
+            print(f"HTTP retry {attempt}/{attempts - 1}: {type(exc).__name__}: {exc}")
+        time.sleep(min(3 * attempt, 6))
+    if last_exc:
+        raise last_exc
+    raise RuntimeError(f"HTTP request failed without a response: {url}")
+
+
 def check_http(session: requests.Session, url: str, expected: int = 200, timeout: float = 20) -> requests.Response:
     start = time.perf_counter()
-    response = session.get(url, timeout=timeout)
+    try:
+        response = request_with_retries(session, "GET", url, timeout=timeout)
+    except requests.RequestException as exc:
+        fail(f"HTTP request failed after retries: GET {url}: {type(exc).__name__}: {exc}")
     elapsed = time.perf_counter() - start
     print(f"HTTP {response.status_code} {elapsed:.3f}s {url}")
     if response.status_code != expected:
@@ -28,28 +52,43 @@ def check_http(session: requests.Session, url: str, expected: int = 200, timeout
     return response
 
 
+def get_build(session: requests.Session, base_url: str) -> dict:
+    response = check_http(session, urljoin(base_url, "/static/dev-build.json"))
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        fail(f"dev-build.json is not valid JSON: {exc}")
+    if not isinstance(payload, dict):
+        fail("dev-build.json did not return a JSON object")
+    return payload
+
+
 def wait_for_deployment(session: requests.Session, base_url: str, expected_commit: str, timeout: int) -> dict:
+    """Wait for Render to expose the exact DEV commit, tolerating transient timeouts."""
     deadline = time.time() + timeout
     last = None
     while time.time() < deadline:
         try:
-            health = session.get(urljoin(base_url, "/healthz"), timeout=15)
+            health = request_with_retries(session, "GET", urljoin(base_url, "/healthz"), attempts=3, timeout=15)
             if health.status_code == 200:
-                build = session.get(urljoin(base_url, "/static/dev-build.json"), timeout=15)
+                build = request_with_retries(session, "GET", urljoin(base_url, "/static/dev-build.json"), attempts=3, timeout=15)
                 if build.status_code == 200:
-                    last = build.json()
-                    commit = str(last.get("commit", ""))
-                    print(f"DEV deployment reports branch={last.get('branch')} commit={commit}")
-                    if commit == expected_commit:
-                        return last
+                    try:
+                        last = build.json()
+                    except ValueError:
+                        last = None
+                    if isinstance(last, dict):
+                        commit = str(last.get("commit", ""))
+                        print(f"DEV deployment reports branch={last.get('branch')} commit={commit}")
+                        if commit == expected_commit:
+                            return last
         except (requests.RequestException, ValueError) as exc:
-            print(f"Waiting for DEV deployment: {exc}")
+            print(f"Waiting for DEV deployment: {type(exc).__name__}: {exc}")
         time.sleep(10)
     fail(f"DEV deployment did not expose expected commit {expected_commit}; last={last}")
 
 
 def validate_summary_payload(payload: dict, scan_date: str, expected_view: str = "shortlist") -> list[dict]:
-    """Validate the public summary contract used by scan.js."""
     if not isinstance(payload, dict):
         fail("Scan summary API did not return a JSON object")
     if payload.get("date") != scan_date:
@@ -77,12 +116,10 @@ def validate_summary_payload(payload: dict, scan_date: str, expected_view: str =
             fail(f"Shortlist row {index} is not marked is_shortlisted=true")
         if row.get("score") is not None and not isinstance(row.get("score"), int):
             fail(f"Scan summary row {index} has a non-integer score")
-
     return rows
 
 
 def validate_candidates_payload(payload: dict, scan_date: str) -> list[dict]:
-    """Validate the second scan view used by the All Reviewed tab."""
     if not isinstance(payload, dict):
         fail("Candidates summary API did not return a JSON object")
     if payload.get("date") != scan_date or payload.get("view") != "candidates":
@@ -112,9 +149,6 @@ def browser_checks(base_url: str, home_budget: float) -> None:
         page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
         page.on("pageerror", lambda exc: page_errors.append(str(exc)))
 
-        # Only application-origin request failures are test failures. Third-party
-        # telemetry/analytics requests can be intentionally blocked or aborted by
-        # browsers and are outside the application's functional contract.
         def record_failed_request(req) -> None:
             if req.url.startswith(app_origin + "/") or req.url == app_origin:
                 failed_requests.append(f"{req.method} {req.url}: {req.failure}")
@@ -122,7 +156,10 @@ def browser_checks(base_url: str, home_budget: float) -> None:
         page.on("requestfailed", record_failed_request)
 
         start = time.perf_counter()
-        response = page.goto(base_url + "/", wait_until="domcontentloaded", timeout=30_000)
+        try:
+            response = page.goto(base_url + "/", wait_until="domcontentloaded", timeout=30_000)
+        except Exception as exc:
+            fail(f"Browser could not load home page: {type(exc).__name__}: {exc}")
         home_time = time.perf_counter() - start
         if response is None or response.status != 200:
             fail(f"Home page did not return 200: {response.status if response else 'no response'}")
@@ -139,19 +176,20 @@ def browser_checks(base_url: str, home_budget: float) -> None:
         if "/scan/" not in page.url:
             fail(f"Latest scan navigation failed: {page.url}")
         print(f"Latest scan URL: {page.url}")
-
         scan_date = page.url.rstrip("/").split("/")[-1]
 
-        # scan.html is a server-rendered shell; scan.js loads result data asynchronously.
         try:
             page.locator("#scan-loading").wait_for(state="hidden", timeout=15_000)
             page.locator("#result-count").wait_for(state="visible", timeout=5_000)
         except PlaywrightTimeoutError:
             fail("Scan results did not finish loading within 15 seconds")
 
-        summary_response = page.request.get(
-            urljoin(base_url, f"/api/scan/{scan_date}/summary?view=shortlist")
-        )
+        api_start = time.perf_counter()
+        summary_response = page.request.get(urljoin(base_url, f"/api/scan/{scan_date}/summary?view=shortlist"))
+        api_time = time.perf_counter() - api_start
+        print(f"API shortlist summary: HTTP {summary_response.status} {api_time:.3f}s")
+        if api_time > 5:
+            print(f"PERF WARNING: shortlist summary API {api_time:.3f}s exceeds 5.000s budget")
         if summary_response.status != 200:
             fail(f"Scan summary API returned HTTP {summary_response.status}")
         shortlist_rows = validate_summary_payload(summary_response.json(), scan_date)
@@ -166,7 +204,6 @@ def browser_checks(base_url: str, home_budget: float) -> None:
             table_buttons = page.locator("#scan-tbody [data-stock]")
             if rendered.count() == 0 and table_buttons.count() == 0:
                 fail("Scan API returned rows, but the UI rendered no stock results")
-
             first_symbol = str(shortlist_rows[0]["symbol"]).strip()
             stock_button = page.locator(f'[data-stock="{first_symbol}"]').first
             if stock_button.count() == 0:
@@ -181,7 +218,6 @@ def browser_checks(base_url: str, home_budget: float) -> None:
             if page.locator("#detail-loading").is_visible():
                 fail(f"Stock detail remains stuck on loading for {first_symbol}")
             print(f"Stock detail UI OK: {first_symbol}")
-
             back = page.locator("#detail-back")
             if back.count() == 0:
                 fail("Stock detail Back to results control is missing")
@@ -197,9 +233,12 @@ def browser_checks(base_url: str, home_budget: float) -> None:
         except PlaywrightTimeoutError:
             fail("All Reviewed view did not finish loading within 15 seconds")
 
-        candidates_response = page.request.get(
-            urljoin(base_url, f"/api/scan/{scan_date}/summary?view=candidates")
-        )
+        api_start = time.perf_counter()
+        candidates_response = page.request.get(urljoin(base_url, f"/api/scan/{scan_date}/summary?view=candidates"))
+        api_time = time.perf_counter() - api_start
+        print(f"API candidates summary: HTTP {candidates_response.status} {api_time:.3f}s")
+        if api_time > 5:
+            print(f"PERF WARNING: candidates summary API {api_time:.3f}s exceeds 5.000s budget")
         if candidates_response.status != 200:
             fail(f"Candidates summary API returned HTTP {candidates_response.status}")
         candidate_rows = validate_candidates_payload(candidates_response.json(), scan_date)
@@ -214,13 +253,14 @@ def browser_checks(base_url: str, home_budget: float) -> None:
             page.wait_for_timeout(200)
             if page.locator("#result-count").inner_text().strip().startswith("0 stock"):
                 fail(f"Scan search failed to find {search_symbol}")
+            print(f"Scan search OK: {search_symbol}")
             search.fill("")
 
         if console_errors or page_errors:
             fail("Browser JavaScript errors: " + " | ".join(console_errors + page_errors)[:2000])
         if failed_requests:
             fail("Browser application request failures: " + " | ".join(failed_requests)[:2000])
-
+        print("Browser console/page/request checks: PASS")
         browser.close()
 
 
@@ -230,25 +270,31 @@ def main() -> int:
     parser.add_argument("--expected-commit", default=os.environ.get("EXPECTED_COMMIT", ""))
     parser.add_argument("--deploy-timeout", type=int, default=600)
     parser.add_argument("--home-budget", type=float, default=5.0)
+    parser.add_argument("--http-attempts", type=int, default=3)
     args = parser.parse_args()
 
     base = args.base_url.rstrip("/") + "/"
     session = requests.Session()
-    session.headers.update({"User-Agent": "RYB-Finserv-DEV-Test/1.0"})
+    session.headers.update({"User-Agent": "RYB-Finserv-DEV-Test/2.0"})
 
-    check_http(session, urljoin(base, "/healthz"))
+    # Deployment preflight is the only gate. It now tolerates transient
+    # GitHub-runner -> Render connection timeouts before declaring the DEV
+    # service unavailable.
     if args.expected_commit:
-        wait_for_deployment(session, base, args.expected_commit, args.deploy_timeout)
+        build = wait_for_deployment(session, base, args.expected_commit, args.deploy_timeout)
     else:
-        check_http(session, urljoin(base, "/static/dev-build.json"))
+        check_http(session, urljoin(base, "/healthz"), timeout=20)
+        build = get_build(session, base)
 
-    build = session.get(urljoin(base, "/static/dev-build.json"), timeout=20).json()
-    if build.get("branch") not in ("dev-latest", "unknown"):
-        fail(f"DEV service reports unexpected branch: {build.get('branch')}")
+    branch = build.get("branch")
+    if branch not in ("dev-latest", "unknown"):
+        fail(f"DEV service reports unexpected branch: {branch}")
+    print(f"DEV preflight PASS: branch={branch} commit={build.get('commit')}")
 
-    check_http(session, base)
+    check_http(session, base, timeout=20)
+    print("TEST PACK STARTED")
     browser_checks(base, args.home_budget)
-    print("DEV application checks PASSED")
+    print("DEV application test pack PASSED")
     return 0
 
 
