@@ -73,6 +73,12 @@ jobs:
         run: |
           python -m nse_pipeline.promoter_history --date "${{ steps.date.outputs.run_date }}"
 
+      - name: Enforce promoter timing output
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python -m nse_pipeline.ensure_timing --date "${{ steps.date.outputs.run_date }}"
+
       - name: Validate generated snapshot
         run: |
           RUN_DATE="${{ steps.date.outputs.run_date }}"
