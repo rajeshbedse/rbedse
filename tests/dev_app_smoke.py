@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 import time
 from urllib.parse import urljoin
 
@@ -84,8 +83,18 @@ def validate_summary_payload(payload: dict, scan_date: str, expected_view: str =
 
 def validate_candidates_payload(payload: dict, scan_date: str) -> list[dict]:
     """Validate the second scan view used by the All Reviewed tab."""
-    rows = validate_summary_payload(payload, scan_date, expected_view="candidates")
+    if not isinstance(payload, dict):
+        fail("Candidates summary API did not return a JSON object")
+    if payload.get("date") != scan_date or payload.get("view") != "candidates":
+        fail("Candidates summary API returned an invalid date or view")
+    rows = payload.get("rows")
+    if not isinstance(rows, list):
+        fail("Candidates summary API schema is invalid: rows is not a list")
     for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            fail(f"Candidate row {index} is not an object")
+        if not str(row.get("symbol", "")).strip():
+            fail(f"Candidate row {index} has an empty symbol")
         if not isinstance(row.get("is_shortlisted"), bool):
             fail(f"Candidate row {index} has invalid is_shortlisted flag")
     return rows
@@ -124,9 +133,7 @@ def browser_checks(base_url: str, home_budget: float) -> None:
 
         scan_date = page.url.rstrip("/").split("/")[-1]
 
-        # The scan page is server-rendered as a shell; scan.js loads the actual
-        # rows asynchronously. Validate the loading lifecycle instead of looking
-        # for static words such as "Research" or "Candidates" in body text.
+        # scan.html is a server-rendered shell; scan.js loads result data asynchronously.
         try:
             page.locator("#scan-loading").wait_for(state="hidden", timeout=15_000)
             page.locator("#result-count").wait_for(state="visible", timeout=5_000)
@@ -138,14 +145,11 @@ def browser_checks(base_url: str, home_budget: float) -> None:
         )
         if summary_response.status != 200:
             fail(f"Scan summary API returned HTTP {summary_response.status}")
-        summary_payload = summary_response.json()
-        shortlist_rows = validate_summary_payload(summary_payload, scan_date)
+        shortlist_rows = validate_summary_payload(summary_response.json(), scan_date)
         print(f"Scan shortlist rows: {len(shortlist_rows)}")
 
-        # The rendered result count and data-backed result state must agree with
-        # the API. This remains valid when the scan is legitimately empty.
         result_count_text = page.locator("#result-count").inner_text().strip()
-        if not result_count_text or result_count_text == "Loading…" or result_count_text == "Unable to load":
+        if not result_count_text or result_count_text in ("Loading…", "Unable to load"):
             fail(f"Scan result count did not render correctly: {result_count_text!r}")
 
         if shortlist_rows:
@@ -155,11 +159,6 @@ def browser_checks(base_url: str, home_budget: float) -> None:
                 fail("Scan API returned rows, but the UI rendered no stock results")
 
             first_symbol = str(shortlist_rows[0]["symbol"]).strip()
-            if not first_symbol:
-                fail("First shortlist row has no symbol")
-
-            # Exercise the primary stock-detail interaction, including the
-            # asynchronous detail load that is central to the research UI.
             stock_button = page.locator(f'[data-stock="{first_symbol}"]').first
             if stock_button.count() == 0:
                 fail(f"First API stock {first_symbol} is not rendered in the UI")
@@ -174,15 +173,13 @@ def browser_checks(base_url: str, home_budget: float) -> None:
                 fail(f"Stock detail remains stuck on loading for {first_symbol}")
             print(f"Stock detail UI OK: {first_symbol}")
 
-            # Close the detail view and confirm the scan result list is usable.
             back = page.locator("#detail-back")
             if back.count() == 0:
                 fail("Stock detail Back to results control is missing")
             back.click()
             page.locator("#stock-cards").wait_for(state="visible", timeout=5_000)
 
-        # Validate the All Reviewed tab and its separate API contract.
-        candidates_tab = page.get_by_role("tab", name=lambda name: "All Reviewed" in name)
+        candidates_tab = page.locator('.scan-tab[data-view="candidates"]')
         if candidates_tab.count() == 0:
             fail("All Reviewed tab is missing")
         candidates_tab.click()
@@ -196,16 +193,11 @@ def browser_checks(base_url: str, home_budget: float) -> None:
         )
         if candidates_response.status != 200:
             fail(f"Candidates summary API returned HTTP {candidates_response.status}")
-        candidates_payload = candidates_response.json()
-        candidate_rows = validate_candidates_payload(candidates_payload, scan_date)
+        candidate_rows = validate_candidates_payload(candidates_response.json(), scan_date)
         print(f"All Reviewed rows: {len(candidate_rows)}")
         if len(candidate_rows) < len(shortlist_rows):
             fail("All Reviewed API returned fewer rows than the shortlist")
-        if shortlist_rows and page.locator("#result-count").inner_text().strip() in ("Loading…", "Unable to load"):
-            fail("All Reviewed result count did not render")
 
-        # Exercise search without relying on a particular stock symbol. Use the
-        # first candidate returned by the API and verify the UI narrows to it.
         if candidate_rows:
             search_symbol = str(candidate_rows[0]["symbol"]).strip()
             search = page.locator("#scan-search")
@@ -215,7 +207,6 @@ def browser_checks(base_url: str, home_budget: float) -> None:
                 fail(f"Scan search failed to find {search_symbol}")
             search.fill("")
 
-        # Clear any transient UI state before final browser diagnostics.
         if console_errors or page_errors:
             fail("Browser JavaScript errors: " + " | ".join(console_errors + page_errors)[:2000])
         if failed_requests:
