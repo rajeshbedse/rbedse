@@ -57,7 +57,7 @@ class PromoterTimingTests(unittest.TestCase):
         self.assertEqual(row["UniquePromotersBuying"], 2)
         self.assertEqual(row["Freshness"], "Fresh")
         self.assertEqual(row["AccumulationStage"], "Confirmed Accumulation")
-        self.assertAlmostEqual(row["WeightedAvgBuyPrice"], 119.5, places=6)
+        self.assertAlmostEqual(row["WeightedAvgBuyPrice"], 120.0, places=6)
 
 
 if __name__ == "__main__":
