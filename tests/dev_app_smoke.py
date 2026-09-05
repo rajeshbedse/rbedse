@@ -103,6 +103,9 @@ def validate_summary_payload(payload: dict, scan_date: str, expected_view: str =
         "symbol", "company", "last_price", "avg_price", "price_diff_pct",
         "promo_holding", "value_cr", "num_buy_txn", "acq_to_dt",
         "score", "category", "category_css", "band", "is_shortlisted",
+        "promoter_avg_price", "cmp_vs_promoter_avg_pct", "freshness",
+        "accumulation_stage", "signal_stage", "first_buy_date", "last_buy_date",
+        "accumulation_days", "days_since_last_buy", "buy_txn_30d",
     }
     for index, row in enumerate(rows):
         if not isinstance(row, dict):
@@ -116,6 +119,8 @@ def validate_summary_payload(payload: dict, scan_date: str, expected_view: str =
             fail(f"Shortlist row {index} is not marked is_shortlisted=true")
         if row.get("score") is not None and not isinstance(row.get("score"), int):
             fail(f"Scan summary row {index} has a non-integer score")
+    if rows and not any(str(row.get("freshness") or "No Signal") != "No Signal" for row in rows):
+        fail("Scan summary contains no populated promoter timing signals")
     return rows
 
 
@@ -277,9 +282,6 @@ def main() -> int:
     session = requests.Session()
     session.headers.update({"User-Agent": "RYB-Finserv-DEV-Test/2.0"})
 
-    # Deployment preflight is the only gate. It now tolerates transient
-    # GitHub-runner -> Render connection timeouts before declaring the DEV
-    # service unavailable.
     if args.expected_commit:
         build = wait_for_deployment(session, base, args.expected_commit, args.deploy_timeout)
     else:
