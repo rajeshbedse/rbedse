@@ -1,0 +1,54 @@
+name: DEV Application Tests
+
+on:
+  push:
+    branches:
+      - dev-latest
+  workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: "Commit expected on DEV Render (leave blank for current branch HEAD)"
+        required: false
+        type: string
+
+# DEV-only application verification. This workflow never deploys or modifies main.
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-application-tests
+  cancel-in-progress: true
+
+env:
+  RYB_DEV_URL: https://ryb-finserv-dev.onrender.com
+
+jobs:
+  test-dev:
+    if: github.ref == 'refs/heads/dev-latest' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout DEV branch
+        uses: actions/checkout@v4
+        with:
+          ref: dev-latest
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install DEV test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run DEV application checks
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit || github.sha }}
+        run: python tests/dev_app_smoke.py --expected-commit "$EXPECTED_COMMIT"
