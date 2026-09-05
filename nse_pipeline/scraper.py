@@ -16,7 +16,9 @@ import requests
 from bs4 import BeautifulSoup
 
 from .config import (
-    NSE_FILING_PERIOD, SCRAPER_DETAIL_DELAY, SCRAPER_WORKERS, USER_AGENT
+    NSE_FILING_PERIOD, SCRAPER_DETAIL_DELAY, SCRAPER_DETAIL_RETRIES,
+    SCRAPER_DETAIL_RETRY_DELAY, SCRAPER_DETAIL_TIMEOUT, SCRAPER_WORKERS,
+    USER_AGENT,
 )
 
 log = logging.getLogger(__name__)
@@ -42,6 +44,8 @@ _HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://www.nseindia.com/",
 }
+
+_RETRYABLE_STATUS_CODES = {403, 429, 500, 502, 503, 504}
 
 
 def _parse_detail_html(html: str) -> dict:
@@ -78,33 +82,62 @@ def _worker(rows_slice, cookies, worker_id, counter, counter_lock, total, log_ev
     records, failed_urls = [], []
     for row in rows_slice:
         try:
-            resp = session.get(row["detailsUrl"], timeout=20)
-            resp.raise_for_status()
-            details = _parse_detail_html(resp.text)
-            header, trades = details["header"], details["trades"]
-            base = {
-                "Symbol": row["symbol"], "Company Name": row["company"],
-                "Regulation": row["regulation"], "Type of Submission": row["typeSubmission"],
-                "Broadcast Date/Time": row["broadcastDate"], "Details URL": row["detailsUrl"],
-                "Scrip Code": header.get("Scrip Code", ""), "NSE Symbol": header.get("NSE Symbol", ""),
-                "MSEI Symbol": header.get("MSEI Symbol", ""),
-                "Name of Signatory": header.get("Name of the Signatory", ""),
-                "Designation of Signatory": header.get("Designation of Signatory", ""),
-            }
-            if trades:
-                for tr in trades:
-                    records.append({**base, "Sr. No.": tr["srNo"], "Type of Instrument": tr["typeInstrument"],
-                        "Category of Person": tr["categoryPerson"], "Name of Person": tr["namePerson"],
-                        "CIN/DIN": tr["cinDin"], "Securities Held Prior (No.)": tr["heldPriorNo"],
-                        "Securities Held Prior (%)": tr["heldPriorPct"],
-                        "Securities Acquired/Disposed (No.)": tr["acquiredNo"],
-                        "Securities Acquired/Disposed (Value)": tr["acquiredValue"],
-                        "Transaction Type": tr["transactionType"], "Securities Held Post (No.)": tr["heldPostNo"],
-                        "Securities Held Post (%)": tr["heldPostPct"], "Date From": tr["dateFrom"],
-                        "Date To": tr["dateTo"], "Mode of Acquisition/Disposal": tr["modeAcquisition"],
-                        "Date of Intimation": tr["dateIntimation"], "Exchange": tr["exchange"], "Notes": tr["notes"]})
+            last_exc = None
+            for attempt in range(1, SCRAPER_DETAIL_RETRIES + 1):
+                try:
+                    resp = session.get(row["detailsUrl"], timeout=SCRAPER_DETAIL_TIMEOUT)
+                    if resp.status_code in _RETRYABLE_STATUS_CODES and attempt < SCRAPER_DETAIL_RETRIES:
+                        log.warning(
+                            "[W%d] RETRY %s: HTTP %d (attempt %d/%d)",
+                            worker_id, row["symbol"], resp.status_code,
+                            attempt, SCRAPER_DETAIL_RETRIES,
+                        )
+                        time.sleep(SCRAPER_DETAIL_RETRY_DELAY)
+                        continue
+                    resp.raise_for_status()
+                    details = _parse_detail_html(resp.text)
+                    header, trades = details["header"], details["trades"]
+                    base = {
+                        "Symbol": row["symbol"], "Company Name": row["company"],
+                        "Regulation": row["regulation"], "Type of Submission": row["typeSubmission"],
+                        "Broadcast Date/Time": row["broadcastDate"], "Details URL": row["detailsUrl"],
+                        "Scrip Code": header.get("Scrip Code", ""), "NSE Symbol": header.get("NSE Symbol", ""),
+                        "MSEI Symbol": header.get("MSEI Symbol", ""),
+                        "Name of Signatory": header.get("Name of the Signatory", ""),
+                        "Designation of Signatory": header.get("Designation of Signatory", ""),
+                    }
+                    if trades:
+                        for tr in trades:
+                            records.append({**base, "Sr. No.": tr["srNo"], "Type of Instrument": tr["typeInstrument"],
+                                "Category of Person": tr["categoryPerson"], "Name of Person": tr["namePerson"],
+                                "CIN/DIN": tr["cinDin"], "Securities Held Prior (No.)": tr["heldPriorNo"],
+                                "Securities Held Prior (%)": tr["heldPriorPct"],
+                                "Securities Acquired/Disposed (No.)": tr["acquiredNo"],
+                                "Securities Acquired/Disposed (Value)": tr["acquiredValue"],
+                                "Transaction Type": tr["transactionType"], "Securities Held Post (No.)": tr["heldPostNo"],
+                                "Securities Held Post (%)": tr["heldPostPct"], "Date From": tr["dateFrom"],
+                                "Date To": tr["dateTo"], "Mode of Acquisition/Disposal": tr["modeAcquisition"],
+                                "Date of Intimation": tr["dateIntimation"], "Exchange": tr["exchange"], "Notes": tr["notes"]})
+                    else:
+                        records.append(base)
+                    break
+                except requests.RequestException as exc:
+                    last_exc = exc
+                    if attempt < SCRAPER_DETAIL_RETRIES and (
+                        isinstance(exc, requests.Timeout) or
+                        getattr(exc.response, "status_code", None) in _RETRYABLE_STATUS_CODES
+                    ):
+                        log.warning(
+                            "[W%d] RETRY %s: %s (attempt %d/%d)",
+                            worker_id, row["symbol"], exc,
+                            attempt, SCRAPER_DETAIL_RETRIES,
+                        )
+                        time.sleep(SCRAPER_DETAIL_RETRY_DELAY)
+                        continue
+                    raise
             else:
-                records.append(base)
+                if last_exc:
+                    raise last_exc
         except Exception as exc:
             failed_urls.append(f"{row['symbol']}\t{row['detailsUrl']}\t{exc}")
             log.warning("[W%d] SKIP %s: %s", worker_id, row["symbol"], exc)
