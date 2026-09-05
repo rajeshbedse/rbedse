@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 
 OUT = Path("test-results")
+OUT.mkdir(parents=True, exist_ok=True)
 LOG = OUT / "smoke.log"
 REPORT = OUT / "dev-test-report.html"
 JSON_OUT = OUT / "test-results.json"
@@ -103,8 +104,6 @@ for line in text.splitlines():
         add("Performance", "Performance budget", "Within configured budget", line.strip(), "WARN", "smoke.log")
 
 failures = re.findall(r"^FAIL: (.+)$", text, re.MULTILINE)
-# If the test process stopped before browser execution, surface the actual root cause
-# and keep downstream validations as NOT RUN/BLOCKED rather than fake failures.
 if not failures and exit_code != 0:
     failures.append("Test pack exited with code %s before producing a successful result." % exit_code)
 
