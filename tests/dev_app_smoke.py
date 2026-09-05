@@ -9,7 +9,7 @@ import time
 from urllib.parse import urljoin
 
 import requests
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 DEFAULT_BASE_URL = "https://ryb-finserv-dev.onrender.com"
 
@@ -49,6 +49,48 @@ def wait_for_deployment(session: requests.Session, base_url: str, expected_commi
     fail(f"DEV deployment did not expose expected commit {expected_commit}; last={last}")
 
 
+def validate_summary_payload(payload: dict, scan_date: str, expected_view: str = "shortlist") -> list[dict]:
+    """Validate the public summary contract used by scan.js."""
+    if not isinstance(payload, dict):
+        fail("Scan summary API did not return a JSON object")
+    if payload.get("date") != scan_date:
+        fail(f"Scan summary API returned unexpected date: {payload.get('date')}")
+    if payload.get("view") != expected_view:
+        fail(f"Scan summary API returned unexpected view: {payload.get('view')}")
+    rows = payload.get("rows")
+    if not isinstance(rows, list):
+        fail("Scan summary API schema is invalid: rows is not a list")
+
+    required = {
+        "symbol", "company", "last_price", "avg_price", "price_diff_pct",
+        "promo_holding", "value_cr", "num_buy_txn", "acq_to_dt",
+        "score", "category", "category_css", "band", "is_shortlisted",
+    }
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            fail(f"Scan summary row {index} is not an object")
+        missing = sorted(required - row.keys())
+        if missing:
+            fail(f"Scan summary row {index} is missing fields: {', '.join(missing)}")
+        if not str(row.get("symbol", "")).strip():
+            fail(f"Scan summary row {index} has an empty symbol")
+        if row.get("is_shortlisted") is not True:
+            fail(f"Shortlist row {index} is not marked is_shortlisted=true")
+        if row.get("score") is not None and not isinstance(row.get("score"), int):
+            fail(f"Scan summary row {index} has a non-integer score")
+
+    return rows
+
+
+def validate_candidates_payload(payload: dict, scan_date: str) -> list[dict]:
+    """Validate the second scan view used by the All Reviewed tab."""
+    rows = validate_summary_payload(payload, scan_date, expected_view="candidates")
+    for index, row in enumerate(rows):
+        if not isinstance(row.get("is_shortlisted"), bool):
+            fail(f"Candidate row {index} has invalid is_shortlisted flag")
+    return rows
+
+
 def browser_checks(base_url: str, home_budget: float) -> None:
     console_errors: list[str] = []
     page_errors: list[str] = []
@@ -80,32 +122,100 @@ def browser_checks(base_url: str, home_budget: float) -> None:
             fail(f"Latest scan navigation failed: {page.url}")
         print(f"Latest scan URL: {page.url}")
 
-        page.wait_for_timeout(500)
-        body_text = page.locator("body").inner_text()
-        if "Research" not in body_text and "Candidates" not in body_text:
-            fail("Scan page does not contain expected research/candidate content")
-
         scan_date = page.url.rstrip("/").split("/")[-1]
-        api = page.request.get(urljoin(base_url, f"/api/scan/{scan_date}/summary"))
-        if api.status != 200:
-            fail(f"Scan summary API returned HTTP {api.status}")
-        payload = api.json()
-        rows = payload.get("rows")
-        if payload.get("date") != scan_date or not isinstance(rows, list):
-            fail("Scan summary API schema is invalid")
-        print(f"Scan summary rows: {len(rows)}")
 
-        if rows:
-            symbol = str(rows[0].get("symbol", "")).strip()
-            if symbol:
-                detail = page.request.get(urljoin(base_url, f"/api/scan/{scan_date}/stock/{symbol}"))
-                if detail.status != 200:
-                    fail(f"Stock detail API returned HTTP {detail.status} for {symbol}")
-                detail_payload = detail.json()
-                if detail_payload.get("symbol") != symbol:
-                    fail(f"Stock detail API returned unexpected symbol for {symbol}")
-                print(f"Stock detail API OK: {symbol}")
+        # The scan page is server-rendered as a shell; scan.js loads the actual
+        # rows asynchronously. Validate the loading lifecycle instead of looking
+        # for static words such as "Research" or "Candidates" in body text.
+        try:
+            page.locator("#scan-loading").wait_for(state="hidden", timeout=15_000)
+            page.locator("#result-count").wait_for(state="visible", timeout=5_000)
+        except PlaywrightTimeoutError:
+            fail("Scan results did not finish loading within 15 seconds")
 
+        summary_response = page.request.get(
+            urljoin(base_url, f"/api/scan/{scan_date}/summary?view=shortlist")
+        )
+        if summary_response.status != 200:
+            fail(f"Scan summary API returned HTTP {summary_response.status}")
+        summary_payload = summary_response.json()
+        shortlist_rows = validate_summary_payload(summary_payload, scan_date)
+        print(f"Scan shortlist rows: {len(shortlist_rows)}")
+
+        # The rendered result count and data-backed result state must agree with
+        # the API. This remains valid when the scan is legitimately empty.
+        result_count_text = page.locator("#result-count").inner_text().strip()
+        if not result_count_text or result_count_text == "Loading…" or result_count_text == "Unable to load":
+            fail(f"Scan result count did not render correctly: {result_count_text!r}")
+
+        if shortlist_rows:
+            rendered = page.locator("#stock-cards [data-stock]")
+            table_buttons = page.locator("#scan-tbody [data-stock]")
+            if rendered.count() == 0 and table_buttons.count() == 0:
+                fail("Scan API returned rows, but the UI rendered no stock results")
+
+            first_symbol = str(shortlist_rows[0]["symbol"]).strip()
+            if not first_symbol:
+                fail("First shortlist row has no symbol")
+
+            # Exercise the primary stock-detail interaction, including the
+            # asynchronous detail load that is central to the research UI.
+            stock_button = page.locator(f'[data-stock="{first_symbol}"]').first
+            if stock_button.count() == 0:
+                fail(f"First API stock {first_symbol} is not rendered in the UI")
+            stock_button.click()
+            try:
+                page.locator("#detail-content").wait_for(state="visible", timeout=15_000)
+            except PlaywrightTimeoutError:
+                fail(f"Stock detail did not finish loading for {first_symbol}")
+            if page.locator("#detail-title").inner_text().strip() != first_symbol:
+                fail(f"Stock detail opened for unexpected symbol; expected {first_symbol}")
+            if page.locator("#detail-loading").is_visible():
+                fail(f"Stock detail remains stuck on loading for {first_symbol}")
+            print(f"Stock detail UI OK: {first_symbol}")
+
+            # Close the detail view and confirm the scan result list is usable.
+            back = page.locator("#detail-back")
+            if back.count() == 0:
+                fail("Stock detail Back to results control is missing")
+            back.click()
+            page.locator("#stock-cards").wait_for(state="visible", timeout=5_000)
+
+        # Validate the All Reviewed tab and its separate API contract.
+        candidates_tab = page.get_by_role("tab", name=lambda name: "All Reviewed" in name)
+        if candidates_tab.count() == 0:
+            fail("All Reviewed tab is missing")
+        candidates_tab.click()
+        try:
+            page.locator("#scan-loading").wait_for(state="hidden", timeout=15_000)
+        except PlaywrightTimeoutError:
+            fail("All Reviewed view did not finish loading within 15 seconds")
+
+        candidates_response = page.request.get(
+            urljoin(base_url, f"/api/scan/{scan_date}/summary?view=candidates")
+        )
+        if candidates_response.status != 200:
+            fail(f"Candidates summary API returned HTTP {candidates_response.status}")
+        candidates_payload = candidates_response.json()
+        candidate_rows = validate_candidates_payload(candidates_payload, scan_date)
+        print(f"All Reviewed rows: {len(candidate_rows)}")
+        if len(candidate_rows) < len(shortlist_rows):
+            fail("All Reviewed API returned fewer rows than the shortlist")
+        if shortlist_rows and page.locator("#result-count").inner_text().strip() in ("Loading…", "Unable to load"):
+            fail("All Reviewed result count did not render")
+
+        # Exercise search without relying on a particular stock symbol. Use the
+        # first candidate returned by the API and verify the UI narrows to it.
+        if candidate_rows:
+            search_symbol = str(candidate_rows[0]["symbol"]).strip()
+            search = page.locator("#scan-search")
+            search.fill(search_symbol)
+            page.wait_for_timeout(200)
+            if page.locator("#result-count").inner_text().strip().startswith("0 stock"):
+                fail(f"Scan search failed to find {search_symbol}")
+            search.fill("")
+
+        # Clear any transient UI state before final browser diagnostics.
         if console_errors or page_errors:
             fail("Browser JavaScript errors: " + " | ".join(console_errors + page_errors)[:2000])
         if failed_requests:
