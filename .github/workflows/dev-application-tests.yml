@@ -48,6 +48,9 @@ jobs:
       - name: Run promoter timing unit tests
         run: python -m unittest tests.test_promoter_history
 
+      - name: Run timing integration tests
+        run: python -m unittest tests.test_timing_integration
+
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
 
