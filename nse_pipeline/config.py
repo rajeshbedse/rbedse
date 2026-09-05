@@ -6,12 +6,15 @@ from pathlib import Path
 # ── Analysis thresholds ───────────────────────────────────────────────────────
 MIN_PURCHASE_VALUE   = 2_000_000   # ₹ — minimum total promoter buy value per symbol
 MAX_SELL_BUY_RATIO_PCT = 25.0       # hard exclusion if promoter market sells exceed 25% of market buys
-MIN_PROMO_HOLDING    = 60.0        # % — minimum latest-quarter promoter shareholding
+MIN_PROMO_HOLDING    = 60.0         # % — minimum latest-quarter promoter shareholding
 PRICE_PROXIMITY_BANDS = [10, 20, 30]  # % bands for proximity report
 
 # ── NSE scraper ───────────────────────────────────────────────────────────────
 NSE_FILING_PERIOD    = "3M"        # "1M" | "3M" | "6M" | "1Y"
 SCRAPER_DETAIL_DELAY = 0.3         # seconds between detail page loads
+SCRAPER_DETAIL_TIMEOUT = 15        # seconds per detail-page request
+SCRAPER_DETAIL_RETRIES = 2         # total attempts per detail page
+SCRAPER_DETAIL_RETRY_DELAY = 1.5   # seconds between retry attempts
 HOLDING_FETCH_DELAY  = 3.5         # seconds between Screener fetches — 429 protection
 HOLDING_RETRY_COUNT  = 3           # max retries per symbol on 429 (backoff: 5s, 10s, 20s)
 
