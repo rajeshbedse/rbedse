@@ -122,6 +122,26 @@ def run(browser_context, csv_path: Path) -> int:
     log.info("PHASE 1 — Scraping NSE insider trading filings (%s)", NSE_FILING_PERIOD)
     log.info("━" * 60)
     page = browser_context.new_page()
+
+    # TEMPORARY DIAGNOSTIC: capture the network activity triggered by the
+    # Equity/3M filter. This is intentionally observational only.
+    network_events = []
+    def _on_response(response):
+        try:
+            url = response.url
+            if "nseindia.com" in url:
+                network_events.append({
+                    "kind": "response",
+                    "status": response.status,
+                    "method": response.request.method,
+                    "resource_type": response.request.resource_type,
+                    "url": url,
+                    "content_type": response.headers.get("content-type", ""),
+                })
+        except Exception as exc:
+            log.debug("Network diagnostic response handler error: %s", exc)
+    page.on("response", _on_response)
+
     log.info("Navigating to NSE Corporate Filings …")
     page.goto("https://www.nseindia.com/companies-listing/corporate-filings-insider-trading#", wait_until="domcontentloaded", timeout=60_000)
     page.wait_for_selector('a[data-name="InsiderTrading"]', timeout=60_000)
@@ -134,9 +154,14 @@ def run(browser_context, csv_path: Path) -> int:
     page.click('a[href="#Insider_Trading_equity"]')
     page.wait_for_selector(f'#Insider_Trading_equity ul.dayslisting a[data-val="{NSE_FILING_PERIOD}"]', timeout=30_000)
     page.wait_for_timeout(1000)
+
+    # Clear navigation noise so the following output focuses on the filter.
+    network_events.clear()
     log.info("Applying %s filter …", NSE_FILING_PERIOD)
     page.locator(f'#Insider_Trading_equity ul.dayslisting a[data-val="{NSE_FILING_PERIOD}"]').click(force=True)
     page.wait_for_timeout(5000)
+
+    log.info("NSE FILTER NETWORK DIAGNOSTIC: %s", network_events)
 
     raw_cookies = browser_context.cookies()
     cookies = {c["name"]: c["value"] for c in raw_cookies}
