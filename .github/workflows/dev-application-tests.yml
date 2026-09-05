@@ -30,13 +30,13 @@ jobs:
 
     steps:
       - name: Checkout DEV branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: dev-latest
           fetch-depth: 1
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
           cache: pip
@@ -44,6 +44,9 @@ jobs:
 
       - name: Install DEV test dependencies
         run: python -m pip install -r requirements-dev.txt
+
+      - name: Run promoter timing unit tests
+        run: python -m unittest tests.test_promoter_history
 
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
@@ -67,7 +70,7 @@ jobs:
 
       - name: Upload DEV test evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: dev-test-evidence
           path: test-results/
