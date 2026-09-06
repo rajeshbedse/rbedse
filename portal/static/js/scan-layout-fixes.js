@@ -53,6 +53,12 @@
       });
       panel.insertBefore(back, panel.firstChild);
     }
+
+    document.querySelectorAll('.dd-card.promoter .dd-title strong').forEach(function (heading) {
+      if (heading.textContent.trim() === 'Promoter Activity & Timing') {
+        heading.textContent = 'Promoter Activity';
+      }
+    });
   }
 
   function applyAll() {
