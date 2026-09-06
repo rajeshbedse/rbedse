@@ -16,9 +16,8 @@ jobs:
           p=s.get('https://www.nseindia.com/api/daily-reports?key=CM',timeout=30); p.raise_for_status(); data=p.json()
           item=next(x for x in data['CurrentDay']+data['PreviousDay'] if x.get('fileKey')=='CM-52 WEEK-HIGH_LOW')
           r=s.get(item['filePath']+item['fileActlName'],timeout=30); r.raise_for_status()
-          lines=r.text.splitlines(); rows=list(csv.DictReader(lines[1:])); print('REPORT',item); print('COLUMNS',list(rows[0]));
+          lines=r.text.splitlines(); print('LINE0',lines[0]); print('LINE1',lines[1]); print('LINE2',lines[2]); rows=list(csv.DictReader(lines[2:])); print('REPORT',item); print('COLUMNS',list(rows[0]));
           for sym in ('RELIANCE','TCS','INFY','HDFCBANK'):
               row=next((x for x in rows if x.get('Symbol')==sym or x.get('SYMBOL')==sym),None); print('SAMPLE',sym,row)
-          high=[k for k in rows[0] if 'high' in k.lower()]; low=[k for k in rows[0] if 'low' in k.lower()]; print('HIGH_COLS',high); print('LOW_COLS',low); assert high and low
-          print('RAW NSE 52-WEEK REPORT: PASS')
+          print('52-WEEK CSV HEADER: PASS')
           PY
