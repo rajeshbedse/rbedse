@@ -116,6 +116,7 @@ jobs:
               print("DIAG console errors:", console_errors or "NONE")
               print("DIAG page errors:", page_errors or "NONE")
               print("DIAG failed requests:", failed or "NONE")
+              print("DIAG script sources:", page.locator("script[src]").evaluate_all("els => els.map(e => e.src)"))
               print("DIAG scan.js loaded:", page.evaluate("Array.from(document.scripts).some(s => s.src.includes('/static/js/scan.js'))"))
               browser.close()
           PY
