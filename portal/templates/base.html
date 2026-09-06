@@ -114,6 +114,41 @@
         gtag('event', 'scan_tab_view', { view: target.dataset.view || '' });
       }
     });
+
+    // Keep the Risk overview concise and consistent with the Fundamentals and
+    // Technical cards: six rows only, with the actual value shown plainly.
+    (function () {
+      function cleanRiskCard() {
+        var cards = document.querySelectorAll('.overview-card');
+        cards.forEach(function (card) {
+          var heading = card.querySelector('.ov-head strong');
+          if (!heading || heading.textContent.trim() !== 'Risk') return;
+
+          card.querySelectorAll('.ov-row').forEach(function (row) {
+            var label = row.querySelector('span');
+            var value = row.querySelector('b');
+            if (!label || !value) return;
+
+            var labelText = label.textContent.trim();
+            if (labelText === 'Price vs promoter avg' || labelText === 'Governance concern') {
+              row.remove();
+              return;
+            }
+
+            // The UI should show only the metric itself; pass/fail context is
+            // communicated by the value colour instead of extra text.
+            var text = value.textContent.trim();
+            var dash = text.indexOf(' — ');
+            if (dash >= 0) value.textContent = text.slice(0, dash);
+          });
+        });
+      }
+
+      var observer = new MutationObserver(cleanRiskCard);
+      observer.observe(document.body, { childList: true, subtree: true });
+      document.addEventListener('DOMContentLoaded', cleanRiskCard);
+      cleanRiskCard();
+    })();
   </script>
 </body>
 </html>
