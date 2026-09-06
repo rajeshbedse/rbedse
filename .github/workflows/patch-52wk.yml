@@ -1,0 +1,50 @@
+name: Patch 52W fields from Bhavcopy
+
+on:
+  push:
+    branches: [tmp-52wk8]
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch analyzer
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('nse_pipeline/analyzer.py')
+          s = p.read_text()
+          old = '''def _download_bhavcopy(max_lookback: int = 5, as_of_date: date | None = None) -> dict[str, float] | None:'''
+          new = '''def _download_bhavcopy(max_lookback: int = 5, as_of_date: date | None = None) -> dict[str, dict[str, float | None]] | None:'''
+          if old not in s:
+              raise SystemExit('download signature not found')
+          s = s.replace(old, new, 1)
+          old = '''            prices: dict[str, float] = {}\n            for row in rows:\n                series = row.get("SctySrs", "").strip()\n                if series not in _BHAVCOPY_SERIES:\n                    continue\n                sym = row.get("TckrSymb", "").strip()\n                if sym in prices and series != "EQ":\n                    continue\n                try:\n                    prices[sym] = float(row["ClsPric"])\n                except (ValueError, KeyError):\n                    pass\n            log.info("  Bhavcopy loaded for %s — %d symbols (EQ+BE+BZ)", d.strftime("%Y-%m-%d"), len(prices))\n            return prices'''
+          new = '''            prices: dict[str, dict[str, float | None]] = {}\n            for row in rows:\n                series = row.get("SctySrs", "").strip()\n                if series not in _BHAVCOPY_SERIES:\n                    continue\n                sym = row.get("TckrSymb", "").strip()\n                if sym in prices and series != "EQ":\n                    continue\n                try:\n                    cmp = float(row["ClsPric"])\n                except (ValueError, KeyError):\n                    cmp = None\n                def _bhav_num(*keys):\n                    for key in keys:\n                        raw = row.get(key)\n                        if raw not in (None, "", "-", "NA"):\n                            try:\n                                return float(raw)\n                            except (ValueError, TypeError):\n                                pass\n                    return None\n                prices[sym] = {\n                    "LastPrice": cmp,\n                    "52WeekHigh": _bhav_num("CM_52_wk_High", "CM_52_WK_HIGH"),\n                    "52WeekLow": _bhav_num("CM_52_wk_Low", "CM_52_WK_LOW"),\n                }\n            log.info("  Bhavcopy loaded for %s — %d symbols (EQ+BE+BZ)", d.strftime("%Y-%m-%d"), len(prices))\n            return prices'''
+          if old not in s:
+              raise SystemExit('download parser block not found')
+          s = s.replace(old, new, 1)
+          old = '''def _fetch_prices(symbols: list[str], as_of_date: date | None = None) -> dict[str, float | None]:\n    bhavcopy = _download_bhavcopy(as_of_date=as_of_date)\n    prices: dict[str, float | None] = {}\n    for sym in symbols:\n        price = bhavcopy.get(sym) if bhavcopy else None\n        prices[sym] = price\n        if price is None:\n            log.warning("  price %-15s = N/A  (not found in Bhavcopy EQ/BE/BZ)", sym)\n        else:\n            log.info("  price %-15s = %s", sym, price)\n    return prices'''
+          new = '''def _fetch_prices(symbols: list[str], as_of_date: date | None = None) -> dict[str, dict[str, float | None]]:\n    bhavcopy = _download_bhavcopy(as_of_date=as_of_date)\n    prices: dict[str, dict[str, float | None]] = {}\n    for sym in symbols:\n        data = bhavcopy.get(sym, {}) if bhavcopy else {}\n        prices[sym] = data\n        if data.get("LastPrice") is None:\n            log.warning("  price %-15s = N/A  (not found in Bhavcopy EQ/BE/BZ)", sym)\n        else:\n            log.info("  price %-15s = %s  52W=%s/%s", sym, data.get("LastPrice"), data.get("52WeekHigh"), data.get("52WeekLow"))\n    return prices'''
+          if old not in s:
+              raise SystemExit('fetch prices block not found')
+          s = s.replace(old, new, 1)
+          old = '''    agg_clean["LastPrice"] = agg_clean["Symbol"].map(prices)\n    agg_clean["PromoHolding"]'''
+          new = '''    agg_clean["LastPrice"] = agg_clean["Symbol"].map(lambda s: prices.get(s, {}).get("LastPrice"))\n    agg_clean["52WeekHigh"] = agg_clean["Symbol"].map(lambda s: prices.get(s, {}).get("52WeekHigh"))\n    agg_clean["52WeekLow"] = agg_clean["Symbol"].map(lambda s: prices.get(s, {}).get("52WeekLow"))\n    agg_clean["PromoHolding"]'''
+          if old not in s:
+              raise SystemExit('run price mapping block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          python -m py_compile nse_pipeline/analyzer.py
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add nse_pipeline/analyzer.py
+          git diff --cached --quiet && exit 0
+          git commit -m 'Add 52-week high/low from Bhavcopy'
+          git push
