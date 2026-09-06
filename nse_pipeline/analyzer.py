@@ -267,7 +267,7 @@ _WEEK52_HEADERS = {"User-Agent": USER_AGENT, "Accept": "application/json, text/p
 
 def _parse_52_week_rows(text: str) -> dict[str, dict[str, float | None]]:
     lines = text.splitlines()
-    if lines and lines[0].lstrip().startswith("Disclaimer -"):
+    if lines and lines[0].lstrip("\ufeff").lstrip().startswith("Disclaimer -"):
         lines = lines[1:]
     rows = _csv.DictReader(lines)
     result: dict[str, dict[str, float | None]] = {}
