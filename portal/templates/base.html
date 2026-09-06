@@ -3,7 +3,6 @@
 {% block head_extra %}
   {{ super() }}
   <style id="global-watermark-layer">
-    /* One viewport-anchored watermark shared by normal pages. */
     body > svg[aria-hidden="true"] {
       position: fixed !important;
       inset: 0 !important;
@@ -21,8 +20,6 @@
       position: relative;
       z-index: 1;
     }
-
-    /* Shortlist cards stay transparent so the page watermark remains visible behind them. */
     .stock-cards .stock-card,
     .stock-cards .stock-card-main,
     .stock-cards .research-card,
@@ -30,10 +27,10 @@
       background: transparent !important;
     }
 
-    /* Base state for the analysis surface. The dashboard script adds its own CSS at runtime;
-       the runtime override below is deliberately installed after that stylesheet. */
+    /* Analysis: transparent detail surface with an opaque backdrop outside it, so the
+       underlying scan cards never bleed through the analysis view. */
     .stock-modal { z-index: 1000; background: transparent !important; }
-    .stock-modal-backdrop { background: rgba(15,23,42,.10) !important; }
+    .stock-modal-backdrop { background: #f7f9fc !important; }
     .stock-detail {
       background: transparent !important;
       position: relative !important;
@@ -63,21 +60,17 @@
   </style>
 
   <script>
-    /* stock-detail-dashboard-v2 injects a late stylesheet when View Analysis opens.
-       Re-apply the watermark layer after that stylesheet so its desktop/mobile rules cannot
-       restore an opaque white analysis surface or shrink the watermark to a panel-sized SVG. */
     (function () {
       'use strict';
 
       function installAnalysisWatermarkOverride() {
         if (!document.head || document.getElementById('analysis-watermark-runtime-override')) return;
         if (!document.getElementById('stock-modal')) return;
-
         var style = document.createElement('style');
         style.id = 'analysis-watermark-runtime-override';
         style.textContent = [
           '.stock-modal{background:transparent!important}',
-          '.stock-modal-backdrop{background:rgba(15,23,42,.10)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
+          '.stock-modal-backdrop{background:#f7f9fc!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
           '.stock-modal .stock-detail{background:transparent!important;isolation:auto!important;overflow-y:auto!important;overflow-x:hidden!important}',
           '.stock-modal .stock-detail>.detail-watermark{display:block!important;position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;overflow:visible!important;pointer-events:none!important;z-index:0!important}',
           '.stock-modal .stock-detail>.detail-watermark>svg{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;transform:none!important;overflow:visible!important;pointer-events:none!important;opacity:.06!important;z-index:0!important}',
@@ -91,9 +84,7 @@
       function watchAnalysisStyles() {
         installAnalysisWatermarkOverride();
         if (!document.head) return;
-        new MutationObserver(function () {
-          installAnalysisWatermarkOverride();
-        }).observe(document.head, { childList: true });
+        new MutationObserver(installAnalysisWatermarkOverride).observe(document.head, { childList: true });
       }
 
       if (document.readyState === 'loading') {
