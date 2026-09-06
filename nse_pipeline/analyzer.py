@@ -267,9 +267,10 @@ _WEEK52_HEADERS = {"User-Agent": USER_AGENT, "Accept": "application/json, text/p
 
 def _parse_52_week_rows(text: str) -> dict[str, dict[str, float | None]]:
     lines = text.splitlines()
-    if lines and lines[0].lstrip("\ufeff").lstrip().startswith("Disclaimer -"):
-        lines = lines[1:]
-    rows = _csv.DictReader(lines)
+    header_idx = next((i for i, line in enumerate(lines) if "Adjusted_52_Week_High" in line), None)
+    if header_idx is None:
+        return {}
+    rows = _csv.DictReader(lines[header_idx:])
     result: dict[str, dict[str, float | None]] = {}
     for row in rows:
         sym = (row.get("SYMBOL") or row.get("Symbol") or row.get("TckrSymb") or "").strip()
