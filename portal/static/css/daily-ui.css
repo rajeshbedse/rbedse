@@ -72,3 +72,42 @@
   .scan-row-cta { font-size: 0; }
   .scan-row-cta::before { font-size: var(--text-sm); }
 }
+
+/* Mobile stock-detail promoter activity: keep labels, values and status pills aligned. */
+@media (max-width: 640px) {
+  body .stock-modal .stock-detail .detail-decision-flow .dd-card.promoter .promoter-inner .activity-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    align-items: stretch !important;
+  }
+  body .stock-modal .stock-detail .detail-decision-flow .dd-card.promoter .promoter-inner .activity {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    min-width: 0 !important;
+    min-height: 82px !important;
+    padding: 10px 9px !important;
+  }
+  body .stock-modal .stock-detail .detail-decision-flow .dd-card.promoter .promoter-inner .activity label {
+    width: 100% !important;
+    min-height: 30px !important;
+    margin: 0 0 7px !important;
+    line-height: 1.25 !important;
+  }
+  body .stock-modal .stock-detail .detail-decision-flow .dd-card.promoter .promoter-inner .activity b {
+    display: block !important;
+    min-height: 17px !important;
+    font-size: .76rem !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+  }
+  body .stock-modal .stock-detail .detail-decision-flow .dd-card.promoter .promoter-inner .activity .pill {
+    display: inline-block !important;
+    margin: 7px 0 0 !important;
+    padding: 3px 5px !important;
+    max-width: 100% !important;
+    white-space: nowrap !important;
+    font-size: .48rem !important;
+    line-height: 1.2 !important;
+  }
+}
