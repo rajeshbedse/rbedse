@@ -84,4 +84,60 @@
     if(e.target.closest('[data-stock],#detail-back,.transaction-link,.transaction-back-link'))setTimeout(enforceAnalysisScroll,0);
   });
 })();
+</script><script>
+(function(){
+  function esc(v){return String(v==null?'':v).replace(/[&<>\"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'})[c];});}
+  function num(v){return v!==null&&v!==''&&Number.isFinite(Number(v))?Number(v):null;}
+  function fmt(v,d){var n=num(v);return n===null?'Not available':n.toFixed(d==null?1:d);}
+  function pct(v){var n=num(v);return n===null?'Not available':(n>0?'+':'')+n.toFixed(1)+'%';}
+  function money(v){var n=num(v);return n===null?'Not available':'₹'+n.toLocaleString('en-IN',{maximumFractionDigits:2});}
+  function replaceRisk(row){
+    var panel=document.querySelector('#detail-panel');
+    if(!panel||!row)return;
+    var cards=Array.prototype.slice.call(panel.querySelectorAll('.overview-card'));
+    var riskCard=cards.find(function(card){var h=card.querySelector('.ov-head strong');return h&&h.textContent.trim()==='Risk';});
+    if(!riskCard)return;
+    var pledge=!!row.has_pledging;
+    var de=num(row.de_ratio), holding=num(row.promo_holding), opm=num(row.opm_pct), pe=num(row.pe), deviation=num(row.price_diff_pct);
+    var highDebt=de!==null&&de>1;
+    var lowHolding=holding!==null&&holding<60;
+    var thinMargin=opm!==null&&opm<5;
+    var highPe=pe!==null&&pe>60;
+    var deviationHigh=deviation!==null&&Math.abs(deviation)>30;
+    var unavailable=[];
+    if(de===null)unavailable.push('debt');
+    if(holding===null)unavailable.push('promoter holding');
+    if(opm===null)unavailable.push('operating margin');
+    if(pe===null)unavailable.push('P/E');
+    var riskCount=(pledge?2:0)+(highDebt?2:0)+(lowHolding?2:0)+(thinMargin?1:0)+(highPe?1:0)+(deviationHigh?1:0);
+    var overall=riskCount>=4?'High':riskCount>=2?'Moderate':'Low';
+    var overallClass=overall==='Low'?'good badge':'';
+    function rowHtml(label,value,cls){return '<div class="ov-row"><span>'+esc(label)+'</span><b class="'+(cls||'')+'">'+esc(value)+'</b></div>';}
+    var html='<div class="ov-head"><span class="dd-icon">⚠</span><div><strong>Risk</strong><small>Data-driven risk assessment</small></div></div>';
+    html+=rowHtml('Promoter pledge',pledge?'Yes — pledge event detected':'No — passed NSE pledge filter',pledge?'':'good');
+    html+=rowHtml('Debt / Equity',de===null?'Not available':fmt(de,2)+(highDebt?' — high':' — within range'),highDebt?'':'good');
+    html+=rowHtml('Promoter holding',holding===null?'Not available':fmt(holding,1)+'%'+(lowHolding?' — low':' — screen passed'),lowHolding?'':'good');
+    html+=rowHtml('Operating margin',opm===null?'Not available':fmt(opm,1)+'%'+(thinMargin?' — thin':' — healthy'),thinMargin?'':'good');
+    html+=rowHtml('P/E',pe===null?'Not available':fmt(pe,1)+(highPe?' — high':' — not elevated'),highPe?'':'good');
+    html+=rowHtml('Price vs promoter avg',deviation===null?'Not available':pct(deviation)+(deviationHigh?' — elevated':' — normal')); 
+    html+=rowHtml('Governance concern','Not assessed','');
+    html+=rowHtml('Overall risk',overall+' risk'+(unavailable.length?' · '+unavailable.length+' data point(s) unavailable':''),overallClass);
+    riskCard.innerHTML=html;
+    riskCard.dataset.riskRefresh='1';
+  }
+  function refreshRisk(){
+    var title=document.querySelector('#detail-title');
+    var root=document.querySelector('.scan-page');
+    if(!title||!root)return;
+    var symbol=title.textContent.trim();
+    if(!symbol)return;
+    fetch('/api/scan/'+root.dataset.scanDate+'/stock/'+encodeURIComponent(symbol)).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(replaceRisk).catch(function(){});
+  }
+  var observer=new MutationObserver(function(){
+    var panel=document.querySelector('#detail-panel');
+    if(panel&&panel.querySelector('.overview-card')&&!panel.querySelector('.overview-card[data-risk-refresh="1"]'))refreshRisk();
+  });
+  observer.observe(document.body,{childList:true,subtree:true});
+  document.addEventListener('click',function(e){if(e.target.closest('[data-stock]'))setTimeout(refreshRisk,250);});
+})();
 </script>{% endblock %}
