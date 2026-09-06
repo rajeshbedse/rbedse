@@ -38,6 +38,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Python
+        if: inputs.data_mode == 'refresh_nse'
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
@@ -45,6 +46,7 @@ jobs:
           cache-dependency-path: requirements-pipeline.txt
 
       - name: Install pipeline dependencies
+        if: inputs.data_mode == 'refresh_nse'
         run: python -m pip install -r requirements-pipeline.txt
 
       - name: Install Chromium and virtual display
@@ -106,12 +108,21 @@ jobs:
         run: |
           python -m nse_pipeline.ensure_timing --date "${{ steps.date.outputs.run_date }}"
 
-      - name: Validate selected snapshot
+      - name: Validate generated snapshot
+        if: inputs.data_mode == 'refresh_nse'
         run: |
           RUN_DATE="${{ steps.date.outputs.run_date }}"
-          echo "Data mode: ${{ inputs.data_mode }}"
           ls -lah "output/${RUN_DATE}/"
           python -m nse_pipeline.validate_output --date "${RUN_DATE}"
+
+      - name: Check existing snapshot
+        if: inputs.data_mode == 'reuse_existing'
+        run: |
+          RUN_DATE="${{ steps.date.outputs.run_date }}"
+          echo "Reusing existing DEV snapshot: ${RUN_DATE}"
+          test -f "output/${RUN_DATE}/enriched_analysis.xlsx" || test -f "output/${RUN_DATE}/enriched_full.csv"
+          ls -lah "output/${RUN_DATE}/"
+          echo "Existing snapshot is available; no NSE scraping or pipeline execution was performed."
 
       - name: Publish DEV snapshot to DEV branch only
         if: inputs.data_mode == 'refresh_nse'
@@ -137,9 +148,3 @@ jobs:
 
           git commit -m "DEV NSE scan: ${RUN_DATE}"
           git push origin HEAD:dev-latest
-
-      - name: Reuse-mode summary
-        if: inputs.data_mode == 'reuse_existing'
-        run: |
-          echo "Existing DEV snapshot validated; no NSE scraping was performed."
-          echo "No output files were modified or committed."
