@@ -251,8 +251,6 @@ def _download_bhavcopy(max_lookback: int = 5, as_of_date: date | None = None) ->
                     return None
                 prices[sym] = {
                     "LastPrice": cmp,
-                    "52WeekHigh": _bhav_num("CM_52_wk_High", "CM_52_WK_HIGH"),
-                    "52WeekLow": _bhav_num("CM_52_wk_Low", "CM_52_WK_LOW"),
                 }
             log.info("  Bhavcopy loaded for %s — %d symbols (EQ+BE+BZ)", d.strftime("%Y-%m-%d"), len(prices))
             return prices
@@ -260,6 +258,65 @@ def _download_bhavcopy(max_lookback: int = 5, as_of_date: date | None = None) ->
             log.warning("  Bhavcopy fetch failed for %s: %s", ds, exc)
     log.warning("  Bhavcopy: no file found for dates %s", attempted)
     return None
+
+
+_WEEK52_BASE = "https://nsearchives.nseindia.com/content/equities/CM_52_wk_High_low_{date}.csv"
+_WEEK52_HEADERS = {"User-Agent": USER_AGENT, "Accept": "*/*", "Referer": "https://www.nseindia.com/"}
+
+
+def _download_52_week_report(max_lookback: int = 5, as_of_date: date | None = None) -> dict[str, dict[str, float | None]] | None:
+    """Download NSE's separate CM 52-week high/low report.
+
+    The report contains adjusted 52-week high/low values, which are preferred
+    here because they are corporate-action adjusted and are published by NSE.
+    """
+    session = requests.Session()
+    session.headers.update(_WEEK52_HEADERS)
+    today = as_of_date or date.today()
+    attempted: list[str] = []
+    for delta in range(max_lookback + 1):
+        d = today - timedelta(days=delta)
+        if d.weekday() >= 5:
+            continue
+        ds = d.strftime("%d%m%Y")
+        url = _WEEK52_BASE.format(date=ds)
+        attempted.append(ds)
+        try:
+            resp = session.get(url, timeout=20)
+            if resp.status_code != 200:
+                continue
+            rows = _csv.DictReader(resp.text.splitlines())
+            result: dict[str, dict[str, float | None]] = {}
+            for row in rows:
+                sym = (row.get("Symbol") or row.get("SYMBOL") or row.get("TckrSymb") or "").strip()
+                if not sym:
+                    continue
+
+                def _report_num(*keys):
+                    for key in keys:
+                        raw = row.get(key)
+                        if raw not in (None, "", "-", "NA"):
+                            try:
+                                return float(str(raw).replace(",", "").strip())
+                            except (ValueError, TypeError):
+                                pass
+                    return None
+
+                result[sym] = {
+                    "52WeekHigh": _report_num("Adjusted_52_Week_High"),
+                    "52WeekLow": _report_num("Adjusted_52_Week_Low"),
+                }
+            log.info("  NSE 52-week report loaded for %s — %d symbols", d.strftime("%Y-%m-%d"), len(result))
+            return result
+        except Exception as exc:
+            log.warning("  NSE 52-week report fetch failed for %s: %s", ds, exc)
+    log.warning("  NSE 52-week report: no file found for dates %s", attempted)
+    return None
+
+
+def _fetch_52_week_prices(symbols: list[str], as_of_date: date | None = None) -> dict[str, dict[str, float | None]]:
+    report = _download_52_week_report(as_of_date=as_of_date)
+    return {sym: (report.get(sym, {}) if report else {}) for sym in symbols}
 
 
 def _fetch_prices(symbols: list[str], as_of_date: date | None = None) -> dict[str, dict[str, float | None]]:
@@ -687,14 +744,16 @@ def run(csv_path: Path, full_csv_path: Path, as_of_date: date | None = None) -> 
     _save_promoter_trades(csv_path, set(symbols), full_csv_path.parent / TRADES_CSV_FILENAME)
     log.info("Fetching prices (%d symbols) from NSE Bhavcopy …", len(symbols))
     prices = _fetch_prices(symbols, as_of_date=as_of_date)
+    log.info("Fetching 52-week high/low (%d symbols) from NSE 52 Week High Low Report …", len(symbols))
+    week52 = _fetch_52_week_prices(symbols, as_of_date=as_of_date)
     log.info("Computing DMA50 / DMA200 / 6M return from NSE Bhavcopy history …")
     dma_data = _fetch_dma(symbols, as_of_date=as_of_date)
     log.info("Fetching holdings + fundamentals (%d symbols) from Screener.in …", len(symbols))
     screener_data = _fetch_screener_data(symbols)
     agg_clean = agg_clean.copy()
     agg_clean["LastPrice"] = agg_clean["Symbol"].map(lambda s: prices.get(s, {}).get("LastPrice"))
-    agg_clean["52WeekHigh"] = agg_clean["Symbol"].map(lambda s: prices.get(s, {}).get("52WeekHigh"))
-    agg_clean["52WeekLow"] = agg_clean["Symbol"].map(lambda s: prices.get(s, {}).get("52WeekLow"))
+    agg_clean["52WeekHigh"] = agg_clean["Symbol"].map(lambda s: week52.get(s, {}).get("52WeekHigh"))
+    agg_clean["52WeekLow"] = agg_clean["Symbol"].map(lambda s: week52.get(s, {}).get("52WeekLow"))
     agg_clean["PromoHolding"] = agg_clean["Symbol"].map({sym: screener_data[sym]["holding"] for sym in symbols})
     agg_clean["DMA50"] = agg_clean["Symbol"].map({s: dma_data[s]["DMA50"] for s in symbols})
     agg_clean["DMA200"] = agg_clean["Symbol"].map({s: dma_data[s]["DMA200"] for s in symbols})
