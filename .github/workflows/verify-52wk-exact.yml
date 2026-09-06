@@ -1,0 +1,34 @@
+name: Verify exact 52-week parser
+
+on:
+  push:
+    branches: [fix-52wk-api]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Execute exact parser
+        run: |
+          python - <<'PY'
+          import ast, csv as _csv, requests
+          from pathlib import Path
+          source=Path('nse_pipeline/analyzer.py').read_text(encoding='utf-8')
+          tree=ast.parse(source)
+          fn=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='_parse_52_week_rows')
+          ns={'_csv':_csv}
+          exec(compile(ast.Module(body=[fn], type_ignores=[]),'parser.py','exec'),ns)
+          parse=ns['_parse_52_week_rows']
+          s=requests.Session(); s.headers.update({'User-Agent':'Mozilla/5.0','Accept':'application/json, text/plain, */*','Referer':'https://www.nseindia.com/all-reports'})
+          p=s.get('https://www.nseindia.com/api/daily-reports?key=CM',timeout=30); p.raise_for_status(); data=p.json()
+          item=next(x for x in data['CurrentDay']+data['PreviousDay'] if x.get('fileKey')=='CM-52 WEEK-HIGH_LOW')
+          r=s.get(item['filePath']+item['fileActlName'],timeout=30); r.raise_for_status()
+          parsed=parse(r.text); print('REPORT',item); print('PARSED SYMBOLS',len(parsed))
+          for sym in ('RELIANCE','TCS','INFY','HDFCBANK'):
+              print('PARSED',sym,parsed.get(sym))
+          assert parsed['RELIANCE']['52WeekHigh']==1611.80
+          assert parsed['RELIANCE']['52WeekLow']==1249.80
+          assert len(parsed) > 5000
+          print('EXACT 52-WEEK PARSER: PASS')
+          PY
