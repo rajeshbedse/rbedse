@@ -22,9 +22,13 @@
       position: relative;
       z-index: 1;
     }
+    /* Keep the analysis surface transparent so the global watermark remains visible while scrolling. */
+    .stock-modal { z-index: 1000; background: transparent !important; }
+    .stock-modal-backdrop { background: rgba(15,23,42,.10) !important; }
+    .stock-detail { background: transparent !important; }
+    .stock-detail-header { background: rgba(255,255,255,.88) !important; }
     /* Do not render a second watermark inside the scrolling stock-detail panel. */
     .detail-watermark { display: none !important; }
-    .stock-modal { z-index: 1000; }
   </style>
   <script src="{{ url_for('static', filename='js/scan.js') }}?v={{ scan_js_version }}" defer></script>
   <script src="{{ url_for('static', filename='js/stock-detail-dashboard-v2.js') }}?v={{ scan_js_version }}" defer></script>
