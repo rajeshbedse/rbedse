@@ -30,9 +30,8 @@
       background: transparent !important;
     }
 
-    /* Analysis modal: keep the surface transparent and use its existing watermark as a
-       viewport-fixed layer. This avoids relying on a parent stacking context to expose
-       the global watermark through the scrolling analysis panel. */
+    /* Base state for the analysis surface. The dashboard script adds its own CSS at runtime;
+       the runtime override below is deliberately installed after that stylesheet. */
     .stock-modal { z-index: 1000; background: transparent !important; }
     .stock-modal-backdrop { background: rgba(15,23,42,.10) !important; }
     .stock-detail {
@@ -62,6 +61,49 @@
       z-index: 1;
     }
   </style>
+
+  <script>
+    /* stock-detail-dashboard-v2 injects a late stylesheet when View Analysis opens.
+       Re-apply the watermark layer after that stylesheet so its desktop/mobile rules cannot
+       restore an opaque white analysis surface or shrink the watermark to a panel-sized SVG. */
+    (function () {
+      'use strict';
+
+      function installAnalysisWatermarkOverride() {
+        if (!document.head || document.getElementById('analysis-watermark-runtime-override')) return;
+        if (!document.getElementById('stock-modal')) return;
+
+        var style = document.createElement('style');
+        style.id = 'analysis-watermark-runtime-override';
+        style.textContent = [
+          '.stock-modal{background:transparent!important}',
+          '.stock-modal-backdrop{background:rgba(15,23,42,.10)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
+          '.stock-modal .stock-detail{background:transparent!important;isolation:auto!important;overflow-y:auto!important;overflow-x:hidden!important}',
+          '.stock-modal .stock-detail>.detail-watermark{display:block!important;position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;overflow:visible!important;pointer-events:none!important;z-index:0!important}',
+          '.stock-modal .stock-detail>.detail-watermark>svg{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;transform:none!important;overflow:visible!important;pointer-events:none!important;opacity:.06!important;z-index:0!important}',
+          '.stock-modal .stock-detail>.detail-watermark~.stock-detail-header{background:rgba(255,255,255,.86)!important}',
+          '.stock-modal .stock-detail> :not(.detail-watermark){position:relative;z-index:1}',
+          '.stock-modal .stock-detail .detail-tabs{background:rgba(255,255,255,.86)!important}'
+        ].join('');
+        document.head.appendChild(style);
+      }
+
+      function watchAnalysisStyles() {
+        installAnalysisWatermarkOverride();
+        if (!document.head) return;
+        new MutationObserver(function () {
+          installAnalysisWatermarkOverride();
+        }).observe(document.head, { childList: true });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', watchAnalysisStyles, { once: true });
+      } else {
+        watchAnalysisStyles();
+      }
+    })();
+  </script>
+
   <script src="{{ url_for('static', filename='js/scan.js') }}?v={{ scan_js_version }}" defer></script>
   <script src="{{ url_for('static', filename='js/stock-detail-dashboard-v2.js') }}?v={{ scan_js_version }}" defer></script>
   <script src="{{ url_for('static', filename='js/scan-layout-fixes.js') }}?v={{ scan_js_version }}" defer></script>
