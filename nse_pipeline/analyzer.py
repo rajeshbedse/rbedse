@@ -209,7 +209,7 @@ _BHAVCOPY_BASE = "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_
 _BHAVCOPY_HEADERS = {"User-Agent": USER_AGENT, "Accept": "*/*", "Referer": "https://www.nseindia.com/"}
 
 
-def _download_bhavcopy(max_lookback: int = 5, as_of_date: date | None = None) -> dict[str, float] | None:
+def _download_bhavcopy(max_lookback: int = 5, as_of_date: date | None = None) -> dict[str, dict[str, float | None]] | None:
     session = requests.Session()
     session.headers.update(_BHAVCOPY_HEADERS)
     today = as_of_date or date.today()
@@ -228,7 +228,7 @@ def _download_bhavcopy(max_lookback: int = 5, as_of_date: date | None = None) ->
             z = zipfile.ZipFile(io.BytesIO(resp.content))
             raw = z.read(z.namelist()[0]).decode("utf-8")
             rows = _csv.DictReader(raw.splitlines())
-            prices: dict[str, float] = {}
+            prices: dict[str, dict[str, float | None]] = {}
             for row in rows:
                 series = row.get("SctySrs", "").strip()
                 if series not in _BHAVCOPY_SERIES:
@@ -237,9 +237,23 @@ def _download_bhavcopy(max_lookback: int = 5, as_of_date: date | None = None) ->
                 if sym in prices and series != "EQ":
                     continue
                 try:
-                    prices[sym] = float(row["ClsPric"])
+                    cmp = float(row["ClsPric"])
                 except (ValueError, KeyError):
-                    pass
+                    cmp = None
+                def _bhav_num(*keys):
+                    for key in keys:
+                        raw = row.get(key)
+                        if raw not in (None, "", "-", "NA"):
+                            try:
+                                return float(raw)
+                            except (ValueError, TypeError):
+                                pass
+                    return None
+                prices[sym] = {
+                    "LastPrice": cmp,
+                    "52WeekHigh": _bhav_num("CM_52_wk_High", "CM_52_WK_HIGH"),
+                    "52WeekLow": _bhav_num("CM_52_wk_Low", "CM_52_WK_LOW"),
+                }
             log.info("  Bhavcopy loaded for %s — %d symbols (EQ+BE+BZ)", d.strftime("%Y-%m-%d"), len(prices))
             return prices
         except Exception as exc:
@@ -248,16 +262,16 @@ def _download_bhavcopy(max_lookback: int = 5, as_of_date: date | None = None) ->
     return None
 
 
-def _fetch_prices(symbols: list[str], as_of_date: date | None = None) -> dict[str, float | None]:
+def _fetch_prices(symbols: list[str], as_of_date: date | None = None) -> dict[str, dict[str, float | None]]:
     bhavcopy = _download_bhavcopy(as_of_date=as_of_date)
-    prices: dict[str, float | None] = {}
+    prices: dict[str, dict[str, float | None]] = {}
     for sym in symbols:
-        price = bhavcopy.get(sym) if bhavcopy else None
-        prices[sym] = price
-        if price is None:
+        data = bhavcopy.get(sym, {}) if bhavcopy else {}
+        prices[sym] = data
+        if data.get("LastPrice") is None:
             log.warning("  price %-15s = N/A  (not found in Bhavcopy EQ/BE/BZ)", sym)
         else:
-            log.info("  price %-15s = %s", sym, price)
+            log.info("  price %-15s = %s  52W=%s/%s", sym, data.get("LastPrice"), data.get("52WeekHigh"), data.get("52WeekLow"))
     return prices
 
 
@@ -678,7 +692,9 @@ def run(csv_path: Path, full_csv_path: Path, as_of_date: date | None = None) -> 
     log.info("Fetching holdings + fundamentals (%d symbols) from Screener.in …", len(symbols))
     screener_data = _fetch_screener_data(symbols)
     agg_clean = agg_clean.copy()
-    agg_clean["LastPrice"] = agg_clean["Symbol"].map(prices)
+    agg_clean["LastPrice"] = agg_clean["Symbol"].map(lambda s: prices.get(s, {}).get("LastPrice"))
+    agg_clean["52WeekHigh"] = agg_clean["Symbol"].map(lambda s: prices.get(s, {}).get("52WeekHigh"))
+    agg_clean["52WeekLow"] = agg_clean["Symbol"].map(lambda s: prices.get(s, {}).get("52WeekLow"))
     agg_clean["PromoHolding"] = agg_clean["Symbol"].map({sym: screener_data[sym]["holding"] for sym in symbols})
     agg_clean["DMA50"] = agg_clean["Symbol"].map({s: dma_data[s]["DMA50"] for s in symbols})
     agg_clean["DMA200"] = agg_clean["Symbol"].map({s: dma_data[s]["DMA200"] for s in symbols})
