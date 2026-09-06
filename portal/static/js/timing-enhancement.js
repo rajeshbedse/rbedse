@@ -162,6 +162,8 @@
   if (title) {
     const observer = new MutationObserver(() => {
       const symbol = title.textContent.trim();
+      currentDetailRow = null;
+      document.querySelector('#detail-panel')?.querySelector('.fundamental-metrics-section')?.remove();
       if (symbol) decorateDetail(symbol);
     });
     observer.observe(title, {childList:true, characterData:true, subtree:true});
