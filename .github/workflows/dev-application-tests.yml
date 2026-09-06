@@ -15,7 +15,6 @@ on:
 permissions:
   contents: read
 
-auto_cancel: false
 concurrency:
   group: dev-application-tests
   cancel-in-progress: true
@@ -58,18 +57,7 @@ jobs:
       - name: Run single-stock UI regression
         env:
           EXPECTED_COMMIT: ${{ inputs.expected_commit || github.sha }}
-        run: |
-          for attempt in 1 2 3; do
-            echo "UI regression attempt $attempt/3"
-            if python tests/stock_detail_regression.py --expected-commit "$EXPECTED_COMMIT"; then
-              exit 0
-            fi
-            if [ "$attempt" -lt 3 ]; then
-              echo "UI detail may still be initializing; retrying in 5 seconds..."
-              sleep 5
-            fi
-          done
-          exit 1
+        run: python tests/stock_detail_regression.py --expected-commit "$EXPECTED_COMMIT"
 
       - name: Run DEV application checks
         env:
