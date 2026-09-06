@@ -18,7 +18,7 @@
 (function(){
   function initTransactionNavigation(){
     var style=document.createElement('style');
-    style.textContent='#stock-modal.stock-modal{height:100vh!important;max-height:100vh!important;overflow-y:scroll!important;overflow-x:hidden!important;scrollbar-gutter:stable!important;overscroll-behavior:contain!important}.detail-tabs{display:none!important}.ov-link{display:none!important}.transaction-link{display:inline-block;margin-top:14px;color:#155eef;font-size:.72rem;font-weight:850;text-decoration:none}.transaction-link:after{content:" →";font-size:1rem}.transaction-link:hover{text-decoration:underline}.transaction-back-link{display:inline-block;margin-bottom:14px;color:#155eef;font-size:.72rem;font-weight:850;text-decoration:none}.transaction-back-link:before{content:"← ";font-size:1rem}.transaction-back-link:hover{text-decoration:underline}';
+    style.textContent='.detail-tabs{display:none!important}.ov-link{display:none!important}.transaction-link{display:inline-block;margin-top:14px;color:#155eef;font-size:.72rem;font-weight:850;text-decoration:none}.transaction-link:after{content:" →";font-size:1rem}.transaction-link:hover{text-decoration:underline}.transaction-back-link{display:inline-block;margin-bottom:14px;color:#155eef;font-size:.72rem;font-weight:850;text-decoration:none}.transaction-back-link:before{content:"← ";font-size:1rem}.transaction-back-link:hover{text-decoration:underline}';
     document.head.appendChild(style);
     var observer=new MutationObserver(function(){
       var flow=document.querySelector('.detail-decision-flow');
@@ -59,4 +59,29 @@
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initTransactionNavigation);else initTransactionNavigation();
 })();
-</script><script src="{{ url_for('static', filename='js/scan.js') }}?v={{ scan_js_version }}" defer></script><script src="{{ url_for('static', filename='js/stock-detail-dashboard-v2.js') }}?v={{ scan_js_version }}" defer></script>{% endblock %}
+</script><script src="{{ url_for('static', filename='js/scan.js') }}?v={{ scan_js_version }}" defer></script><script src="{{ url_for('static', filename='js/stock-detail-dashboard-v2.js') }}?v={{ scan_js_version }}" defer></script><script>
+(function(){
+  function enforceAnalysisScroll(){
+    var modal=document.getElementById('stock-modal');
+    var detail=modal&&modal.querySelector('.stock-detail');
+    if(!modal||!detail)return;
+    var css=document.getElementById('analysis-scroll-override');
+    if(!css){
+      css=document.createElement('style');
+      css.id='analysis-scroll-override';
+      css.textContent='#stock-modal.stock-modal{position:fixed!important;inset:0!important;height:100vh!important;max-height:100vh!important;overflow:hidden!important;display:flex!important}.stock-modal .stock-detail{height:100vh!important;max-height:100vh!important;min-height:0!important;overflow-y:scroll!important;overflow-x:hidden!important;scrollbar-width:auto!important;scrollbar-color:#94a3b8 #e2e8f0!important}.stock-modal .stock-detail::-webkit-scrollbar{width:12px!important}.stock-modal .stock-detail::-webkit-scrollbar-track{background:#e2e8f0!important}.stock-modal .stock-detail::-webkit-scrollbar-thumb{background:#94a3b8!important;border-radius:8px!important;border:2px solid #e2e8f0!important}.stock-modal .stock-detail::-webkit-scrollbar-thumb:hover{background:#64748b!important}';
+      document.head.appendChild(css);
+    }
+    detail.style.setProperty('height','100vh','important');
+    detail.style.setProperty('max-height','100vh','important');
+    detail.style.setProperty('min-height','0','important');
+    detail.style.setProperty('overflow-y','scroll','important');
+    detail.style.setProperty('overflow-x','hidden','important');
+    modal.style.setProperty('overflow','hidden','important');
+  }
+  window.addEventListener('load',enforceAnalysisScroll);
+  document.addEventListener('click',function(e){
+    if(e.target.closest('[data-stock],#detail-back,.transaction-link,.transaction-back-link'))setTimeout(enforceAnalysisScroll,0);
+  });
+})();
+</script>{% endblock %}
