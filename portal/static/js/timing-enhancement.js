@@ -32,21 +32,20 @@
   const style = document.createElement('style');
   style.textContent = `
     #detail-price-grid{display:none!important}
+    #detail-why{display:none!important}
     .detail-decision-flow{display:flex;flex-direction:column;gap:12px;margin:0 0 14px}
     .price-context,.timing-summary{border:1px solid #dbe4ef;border-radius:14px;background:#fff;overflow:hidden}
     .flow-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid #e8eef5}
     .flow-head strong{font-size:.78rem;letter-spacing:.04em;text-transform:uppercase;color:#334155}
     .flow-head span{font-size:.65rem;color:#64748b}
-    .price-grid{display:grid;grid-template-columns:1fr 1.15fr 1fr;align-items:stretch}
+    .price-grid{display:grid;grid-template-columns:1fr 1.35fr 1fr;align-items:stretch}
     .price-item{padding:13px 16px;min-width:0;border-left:1px solid #e8eef5}
     .price-item:first-child{border-left:0}
     .price-item small{display:block;color:#64748b;font-size:.64rem;margin-bottom:4px}
     .price-item b{display:block;color:#0f1f3d;font-size:1rem;line-height:1.2}
     .price-item em{display:block;font-style:normal;color:#64748b;font-size:.62rem;margin-top:3px}
-    .price-item--positive b{color:#15803d}
-    .price-item--positive{background:#f7fcf8}
-    .reference-bar{height:6px;margin-top:9px;border-radius:99px;background:#e2e8f0;position:relative}
-    .reference-bar span{position:absolute;top:50%;width:12px;height:12px;border:2px solid #fff;border-radius:50%;background:#1a56db;box-shadow:0 1px 3px rgba(15,31,61,.25);transform:translate(-50%,-50%)}
+    .price-item--range b{font-size:.76rem;color:#334155}
+    .price-unavailable{color:#94a3b8;font-weight:500}
     .timing-summary{background:#f8fafc}
     .timing-summary .flow-head{background:#fff}
     .timing-stage{display:flex;align-items:center;gap:8px;padding:12px 16px 9px}
@@ -102,7 +101,7 @@
       </div>
       <div class="timing-section-title">Entry timing</div>
       <div class="timing-metrics">
-        <div class="timing-metric timing-metric--emphasis"><small>CMP vs avg buy</small><b class="${Number(row.cmp_vs_promoter_avg_pct) >= 0 ? 'timing-confirmed' : 'timing-late'}">${pct(row.cmp_vs_promoter_avg_pct)}</b></div>
+        <div class="timing-metric timing-metric--emphasis"><small>CMP vs promoter avg</small><b class="${Number(row.cmp_vs_promoter_avg_pct) >= 0 ? 'timing-confirmed' : 'timing-late'}">${pct(row.cmp_vs_promoter_avg_pct)}</b></div>
         <div class="timing-metric"><small>Avg buy price</small><b>${money(row.promoter_avg_price)}</b></div>
         <div class="timing-metric"><small>First buy</small><b>${fmtDate(row.first_buy_date)}</b></div>
         <div class="timing-metric"><small>Latest buy</small><b>${fmtDate(row.last_buy_date)}</b></div>
@@ -114,16 +113,17 @@
 
   function priceContext(row) {
     const cmp = Number(row.last_price);
-    const ref = Number(row.avg_price);
-    let marker = '';
-    if (Number.isFinite(cmp) && Number.isFinite(ref) && ref > 0) {
-      const ratio = Math.max(0, Math.min(100, (cmp / (ref * 1.25)) * 100));
-      marker = `<div class="reference-bar" aria-hidden="true"><span style="left:${ratio.toFixed(1)}%"></span></div>`;
+    const high = field(row, ['week52_high','week_52_high','fifty_two_week_high','fiftyTwoWeekHigh','52_week_high','52WeekHigh']);
+    const low = field(row, ['week52_low','week_52_low','fifty_two_week_low','fiftyTwoWeekLow','52_week_low','52WeekLow']);
+    let range = '<span class="price-unavailable">52W range unavailable</span>';
+    if (high != null && low != null && high > low && Number.isFinite(cmp)) {
+      const pos = Math.max(0, Math.min(100, ((cmp-low)/(high-low))*100));
+      range = `<span>${money(low)} — ${money(high)}</span><div class="reference-bar" aria-hidden="true"><span style="left:${pos.toFixed(1)}%"></span></div><em>CMP at ${pos.toFixed(0)}% of range</em>`;
     }
-    return `<section class="price-context" aria-label="Price context"><div class="flow-head"><strong>Price context</strong><span>CMP relative to promoter reference</span></div><div class="price-grid">
+    return `<section class="price-context" aria-label="Price context"><div class="flow-head"><strong>Price context</strong><span>Where the stock trades today</span></div><div class="price-grid">
       <div class="price-item"><small>Current price</small><b>${money(row.last_price)}</b></div>
-      <div class="price-item"><small>Promoter reference</small><b>${money(row.avg_price)}</b>${marker}</div>
-      <div class="price-item price-item--positive"><small>vs reference</small><b>${pct(row.price_diff_pct)}</b><em>Current premium / discount</em></div>
+      <div class="price-item price-item--range"><small>52-week range</small><b>${range}</b></div>
+      <div class="price-item"><small>RYB Score</small><b>${finite(row.score) ? esc(row.score)+'/100' : '—'}</b><em>${esc(row.category || 'Research candidate')}</em></div>
     </div></section>`;
   }
 
