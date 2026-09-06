@@ -18,7 +18,7 @@
 (function(){
   function initTransactionNavigation(){
     var style=document.createElement('style');
-    style.textContent='.detail-tabs{display:none!important}.ov-link{display:none!important}.transaction-link{display:inline-block;margin-top:14px;color:#155eef;font-size:.72rem;font-weight:850;text-decoration:none}.transaction-link:after{content:" →";font-size:1rem}.transaction-link:hover{text-decoration:underline}.transaction-back-link{display:inline-block;margin-bottom:14px;color:#155eef;font-size:.72rem;font-weight:850;text-decoration:none}.transaction-back-link:before{content:"← ";font-size:1rem}.transaction-back-link:hover{text-decoration:underline}';
+    style.textContent='#stock-modal.stock-modal{height:100vh!important;max-height:100vh!important;overflow-y:scroll!important;overflow-x:hidden!important;scrollbar-gutter:stable!important;overscroll-behavior:contain!important}.detail-tabs{display:none!important}.ov-link{display:none!important}.transaction-link{display:inline-block;margin-top:14px;color:#155eef;font-size:.72rem;font-weight:850;text-decoration:none}.transaction-link:after{content:" →";font-size:1rem}.transaction-link:hover{text-decoration:underline}.transaction-back-link{display:inline-block;margin-bottom:14px;color:#155eef;font-size:.72rem;font-weight:850;text-decoration:none}.transaction-back-link:before{content:"← ";font-size:1rem}.transaction-back-link:hover{text-decoration:underline}';
     document.head.appendChild(style);
     var observer=new MutationObserver(function(){
       var flow=document.querySelector('.detail-decision-flow');
