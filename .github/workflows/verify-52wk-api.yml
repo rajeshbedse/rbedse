@@ -18,7 +18,7 @@ jobs:
           item=next(x for x in data['CurrentDay']+data['PreviousDay'] if x.get('fileKey')=='CM-52 WEEK-HIGH_LOW')
           print('REPORT',item)
           r=s.get(item['filePath']+item['fileActlName'],timeout=30); r.raise_for_status(); print('BYTES',len(r.content))
-          rows=list(csv.DictReader(io.StringIO(r.text))); print('ROWS',len(rows)); print('COLUMNS',list(rows[0]))
+          lines=r.text.splitlines(); print('DISCLAIMER',lines[0]); rows=list(csv.DictReader(lines[1:] if lines and lines[0].startswith('Disclaimer -') else lines)); print('ROWS',len(rows)); print('COLUMNS',list(rows[0]))
           required={'SYMBOL','Adjusted 52_Week_High','Adjusted 52_Week_Low'}
           missing=required-set(rows[0]); print('MISSING',missing); assert not missing
           for sym in ('RELIANCE','TCS','INFY','HDFCBANK'):
