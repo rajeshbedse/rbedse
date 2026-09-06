@@ -1,0 +1,60 @@
+name: Patch 52-week NSE report
+
+on:
+  push:
+    branches: [fix-52wk-report]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch analyzer
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('nse_pipeline/analyzer.py')
+          s = p.read_text(encoding='utf-8')
+
+          old_dict = '''                prices[sym] = {\n                    "LastPrice": cmp,\n                    "52WeekHigh": _bhav_num("CM_52_wk_High", "CM_52_WK_HIGH"),\n                    "52WeekLow": _bhav_num("CM_52_wk_Low", "CM_52_WK_LOW"),\n                }'''
+          new_dict = '''                prices[sym] = {\n                    "LastPrice": cmp,\n                }'''
+          if old_dict not in s:
+              raise SystemExit('Expected Bhavcopy 52-week block not found')
+          s = s.replace(old_dict, new_dict, 1)
+
+          marker = '''def _fetch_prices(symbols: list[str], as_of_date: date | None = None) -> dict[str, dict[str, float | None]]:\n'''
+          insert = '''_WEEK52_BASE = "https://nsearchives.nseindia.com/content/equities/CM_52_wk_High_low_{date}.csv"\n_WEEK52_HEADERS = {"User-Agent": USER_AGENT, "Accept": "*/*", "Referer": "https://www.nseindia.com/"}\n\n\ndef _download_52_week_report(max_lookback: int = 5, as_of_date: date | None = None) -> dict[str, dict[str, float | None]] | None:\n    """Download NSE's separate CM 52-week high/low report.\n\n    The report contains adjusted 52-week high/low values, which are preferred\n    here because they are corporate-action adjusted and are published by NSE.\n    """\n    session = requests.Session()\n    session.headers.update(_WEEK52_HEADERS)\n    today = as_of_date or date.today()\n    attempted: list[str] = []\n    for delta in range(max_lookback + 1):\n        d = today - timedelta(days=delta)\n        if d.weekday() >= 5:\n            continue\n        ds = d.strftime("%d%m%Y")\n        url = _WEEK52_BASE.format(date=ds)\n        attempted.append(ds)\n        try:\n            resp = session.get(url, timeout=20)\n            if resp.status_code != 200:\n                continue\n            rows = _csv.DictReader(resp.text.splitlines())\n            result: dict[str, dict[str, float | None]] = {}\n            for row in rows:\n                sym = (row.get("Symbol") or row.get("SYMBOL") or row.get("TckrSymb") or "").strip()\n                if not sym:\n                    continue\n\n                def _report_num(*keys):\n                    for key in keys:\n                        raw = row.get(key)\n                        if raw not in (None, "", "-", "NA"):\n                            try:\n                                return float(str(raw).replace(",", "").strip())\n                            except (ValueError, TypeError):\n                                pass\n                    return None\n\n                result[sym] = {\n                    "52WeekHigh": _report_num("Adjusted_52_Week_High"),\n                    "52WeekLow": _report_num("Adjusted_52_Week_Low"),\n                }\n            log.info("  NSE 52-week report loaded for %s — %d symbols", d.strftime("%Y-%m-%d"), len(result))\n            return result\n        except Exception as exc:\n            log.warning("  NSE 52-week report fetch failed for %s: %s", ds, exc)\n    log.warning("  NSE 52-week report: no file found for dates %s", attempted)\n    return None\n\n\ndef _fetch_52_week_prices(symbols: list[str], as_of_date: date | None = None) -> dict[str, dict[str, float | None]]:\n    report = _download_52_week_report(as_of_date=as_of_date)\n    return {sym: (report.get(sym, {}) if report else {}) for sym in symbols}\n\n\n'''
+          if marker not in s:
+              raise SystemExit('Expected _fetch_prices marker not found')
+          s = s.replace(marker, insert + marker, 1)
+
+          old_run = '''    prices = _fetch_prices(symbols, as_of_date=as_of_date)\n    log.info("Computing DMA50 / DMA200 / 6M return from NSE Bhavcopy history …",)'''
+          if old_run in s:
+              pass
+          else:
+              old_run = '''    prices = _fetch_prices(symbols, as_of_date=as_of_date)\n    log.info("Computing DMA50 / DMA200 / 6M return from NSE Bhavcopy history …")'''
+              if old_run not in s:
+                  raise SystemExit('Expected run price block not found')
+          new_run = '''    prices = _fetch_prices(symbols, as_of_date=as_of_date)\n    log.info("Fetching 52-week high/low (%d symbols) from NSE 52 Week High Low Report …", len(symbols))\n    week52 = _fetch_52_week_prices(symbols, as_of_date=as_of_date)\n    log.info("Computing DMA50 / DMA200 / 6M return from NSE Bhavcopy history …")'''
+          s = s.replace(old_run, new_run, 1)
+
+          old_map = '''    agg_clean["52WeekHigh"] = agg_clean["Symbol"].map(lambda s: prices.get(s, {}).get("52WeekHigh"))\n    agg_clean["52WeekLow"] = agg_clean["Symbol"].map(lambda s: prices.get(s, {}).get("52WeekLow"))'''
+          new_map = '''    agg_clean["52WeekHigh"] = agg_clean["Symbol"].map(lambda s: week52.get(s, {}).get("52WeekHigh"))\n    agg_clean["52WeekLow"] = agg_clean["Symbol"].map(lambda s: week52.get(s, {}).get("52WeekLow"))'''
+          if old_map not in s:
+              raise SystemExit('Expected 52-week mapping block not found')
+          s = s.replace(old_map, new_map, 1)
+
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Validate
+        run: python -m py_compile nse_pipeline/analyzer.py
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add nse_pipeline/analyzer.py
+          git commit -m "feat: fetch 52-week highs and lows from NSE report" || exit 0
+          git push
