@@ -3,7 +3,7 @@
 {% block head_extra %}
   {{ super() }}
   <style id="global-watermark-layer">
-    /* One viewport-anchored watermark shared by every page/state. */
+    /* One viewport-anchored watermark shared by normal pages. */
     body > svg[aria-hidden="true"] {
       position: fixed !important;
       inset: 0 !important;
@@ -14,7 +14,6 @@
       opacity: .06 !important;
       overflow: visible !important;
     }
-    /* The page and modal content must always paint above the watermark. */
     body > .skip-link,
     body > .site-header,
     body > main,
@@ -22,13 +21,46 @@
       position: relative;
       z-index: 1;
     }
-    /* Keep the analysis surface transparent so the global watermark remains visible while scrolling. */
+
+    /* Shortlist cards stay transparent so the page watermark remains visible behind them. */
+    .stock-cards .stock-card,
+    .stock-cards .stock-card-main,
+    .stock-cards .research-card,
+    .stock-cards .research-card-main {
+      background: transparent !important;
+    }
+
+    /* Analysis modal: keep the surface transparent and use its existing watermark as a
+       viewport-fixed layer. This avoids relying on a parent stacking context to expose
+       the global watermark through the scrolling analysis panel. */
     .stock-modal { z-index: 1000; background: transparent !important; }
     .stock-modal-backdrop { background: rgba(15,23,42,.10) !important; }
-    .stock-detail { background: transparent !important; }
-    .stock-detail-header { background: rgba(255,255,255,.88) !important; }
-    /* Do not render a second watermark inside the scrolling stock-detail panel. */
-    .detail-watermark { display: none !important; }
+    .stock-detail {
+      background: transparent !important;
+      position: relative !important;
+    }
+    .stock-detail > .detail-watermark {
+      display: block !important;
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      pointer-events: none !important;
+      z-index: 0 !important;
+    }
+    .stock-detail > .detail-watermark > svg {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      pointer-events: none !important;
+      opacity: .06 !important;
+      overflow: visible !important;
+    }
+    .stock-detail > :not(.detail-watermark) {
+      position: relative;
+      z-index: 1;
+    }
   </style>
   <script src="{{ url_for('static', filename='js/scan.js') }}?v={{ scan_js_version }}" defer></script>
   <script src="{{ url_for('static', filename='js/stock-detail-dashboard-v2.js') }}?v={{ scan_js_version }}" defer></script>
