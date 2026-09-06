@@ -61,34 +61,50 @@
     (function () {
       'use strict';
 
+      var overrideCss = [
+        '.stock-modal{background:transparent!important}',
+        '.stock-modal-backdrop{background:#f7f9fc!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
+        '.stock-modal .stock-detail{background:transparent!important;isolation:auto!important;overflow-y:auto!important;overflow-x:hidden!important}',
+        '.stock-modal .stock-detail>.detail-watermark{display:block!important;position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;overflow:visible!important;pointer-events:none!important;z-index:0!important}',
+        '.stock-modal .stock-detail>.detail-watermark>svg{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;transform:none!important;overflow:visible!important;pointer-events:none!important;opacity:.06!important;z-index:0!important}',
+        '.stock-modal .stock-detail>.stock-detail-header{background:rgba(255,255,255,.86)!important}',
+        '.stock-modal .stock-detail> :not(.detail-watermark){position:relative;z-index:1}',
+        '.stock-modal .stock-detail .detail-tabs{background:rgba(255,255,255,.86)!important}',
+        /* Analysis cards are transparent so the fixed watermark remains visible through the
+           entire analysis page, including while the user scrolls. */
+        '.stock-modal .stock-detail .detail-score-block{background:transparent!important;background-image:none!important}',
+        '.stock-modal .stock-detail .dd-card{background:transparent!important;background-image:none!important}',
+        '.stock-modal .stock-detail .dd-card.promoter{background:transparent!important;background-image:none!important}',
+        '.stock-modal .stock-detail .activity-grid{background:transparent!important;background-image:none!important}',
+        '.stock-modal .stock-detail .activity{background:transparent!important;background-image:none!important}',
+        '.stock-modal .stock-detail .overview-card{background:transparent!important;background-image:none!important}'
+      ].join('');
+
       function installAnalysisWatermarkOverride() {
-        if (!document.head || document.getElementById('analysis-watermark-runtime-override')) return;
-        if (!document.getElementById('stock-modal')) return;
+        if (!document.head || !document.getElementById('stock-modal')) return;
+        var old = document.getElementById('analysis-watermark-runtime-override');
+        if (old) old.remove();
         var style = document.createElement('style');
         style.id = 'analysis-watermark-runtime-override';
-        style.textContent = [
-          '.stock-modal{background:transparent!important}',
-          '.stock-modal-backdrop{background:#f7f9fc!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
-          '.stock-modal .stock-detail{background:transparent!important;isolation:auto!important;overflow-y:auto!important;overflow-x:hidden!important}',
-          '.stock-modal .stock-detail>.detail-watermark{display:block!important;position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;overflow:visible!important;pointer-events:none!important;z-index:0!important}',
-          '.stock-modal .stock-detail>.detail-watermark>svg{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;transform:none!important;overflow:visible!important;pointer-events:none!important;opacity:.06!important;z-index:0!important}',
-          '.stock-modal .stock-detail>.stock-detail-header{background:rgba(255,255,255,.86)!important}',
-          '.stock-modal .stock-detail> :not(.detail-watermark){position:relative;z-index:1}',
-          '.stock-modal .stock-detail .detail-tabs{background:rgba(255,255,255,.86)!important}',
-          '.stock-modal .stock-detail .detail-score-block{background:transparent!important;background-image:none!important}',
-          '.stock-modal .stock-detail .dd-card{background:transparent!important;background-image:none!important}',
-          '.stock-modal .stock-detail .dd-card.promoter{background:transparent!important;background-image:none!important}',
-          '.stock-modal .stock-detail .activity-grid{background:transparent!important;background-image:none!important}',
-          '.stock-modal .stock-detail .activity{background:transparent!important;background-image:none!important}',
-          '.stock-modal .stock-detail .overview-card{background:transparent!important;background-image:none!important}'
-        ].join('');
+        style.textContent = overrideCss;
         document.head.appendChild(style);
       }
 
       function watchAnalysisStyles() {
         installAnalysisWatermarkOverride();
         if (!document.head) return;
-        new MutationObserver(installAnalysisWatermarkOverride).observe(document.head, { childList: true });
+        var observer = new MutationObserver(function (mutations) {
+          var changed = mutations.some(function (m) {
+            return Array.prototype.some.call(m.addedNodes, function (node) {
+              return node !== document.getElementById('analysis-watermark-runtime-override');
+            });
+          });
+          if (!changed) return;
+          observer.disconnect();
+          installAnalysisWatermarkOverride();
+          observer.observe(document.head, { childList: true });
+        });
+        observer.observe(document.head, { childList: true });
       }
 
       if (document.readyState === 'loading') {
