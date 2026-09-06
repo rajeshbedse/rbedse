@@ -54,6 +54,11 @@ jobs:
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
 
+      - name: Run single-stock UI regression
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit || github.sha }}
+        run: python tests/stock_detail_regression.py --expected-commit "$EXPECTED_COMMIT"
+
       - name: Run DEV application checks
         env:
           EXPECTED_COMMIT: ${{ inputs.expected_commit || github.sha }}
