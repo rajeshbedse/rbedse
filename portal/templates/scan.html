@@ -1,132 +1,143 @@
 {% extends "base.html" %}
-
 {% block title %}Report {{ display_date }} — RYB Finserv{% endblock %}
 {% block meta_desc %}RYB Finserv research report for {{ display_date }}. {{ shortlist_count }} quality-screened stocks.{% endblock %}
-
 {% block content %}
 <div class="scan-page" data-scan-date="{{ date_str }}">
-  <div class="page-header scan-header">
-    <div class="container">
-      <nav class="breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ url_for('index') }}" class="bc-link">Dashboard</a>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-        <span class="bc-current" aria-current="page">{{ display_date }}</span>
-      </nav>
-      <div class="page-header-content">
-        <div>
-          <h1 class="page-title"><span class="page-title-weekday">{{ weekday }}</span>{{ display_date }}</h1>
-          <p class="page-sub">Promoter buying research · Explore the strongest setups first</p>
-        </div>
-        <div class="page-header-stats scan-stats">
-          <div class="stat-block"><span class="stat-num">{{ shortlist_count }}</span><span class="stat-lbl">Shortlist</span></div>
-          <div class="stat-block"><span class="stat-num">{{ reviewed_count }}</span><span class="stat-lbl">Reviewed</span></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
+  <div class="page-header scan-header"><div class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="{{ url_for('index') }}" class="bc-link">Dashboard</a><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg><span class="bc-current" aria-current="page">{{ display_date }}</span></nav><div class="page-header-content"><div><h1 class="page-title"><span class="page-title-weekday">{{ weekday }}</span>{{ display_date }}</h1><p class="page-sub">Promoter buying research · Explore the strongest setups first</p></div><div class="page-header-stats scan-stats"><div class="stat-block"><span class="stat-num">{{ shortlist_count }}</span><span class="stat-lbl">Shortlist</span></div><div class="stat-block"><span class="stat-num">{{ reviewed_count }}</span><span class="stat-lbl">Reviewed</span></div></div></div></div></div>
   <main class="container section scan-shell">
-    <div class="scan-tabs" role="tablist" aria-label="Scan result views">
-      <button class="scan-tab is-active" role="tab" aria-selected="true" aria-controls="scan-panel" data-view="shortlist">
-        Shortlist <span class="scan-tab-count">{{ shortlist_count }}</span>
-      </button>
-      <button class="scan-tab" role="tab" aria-selected="false" aria-controls="scan-panel" data-view="candidates">
-        All Reviewed <span class="scan-tab-count">{{ reviewed_count }}</span>
-      </button>
-    </div>
-
-    <section class="scan-toolbar" aria-label="Scan controls">
-      <div class="scan-search-wrap">
-        <svg class="scan-search-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input id="scan-search" type="search" autocomplete="off" placeholder="Search stock or company…" aria-label="Search stocks" />
-        <button id="clear-search" class="icon-btn" type="button" aria-label="Clear search" hidden>×</button>
-      </div>
-      <button id="filter-toggle" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filter-sheet">
-        <span aria-hidden="true">☷</span> Filters <span id="filter-count" class="filter-count" hidden>0</span>
-      </button>
-      <label class="sort-select-wrap" for="scan-sort">Sort
-        <select id="scan-sort" aria-label="Sort results">
-          <option value="score-desc">Score: high to low</option>
-          <option value="value-desc">Promoter buying: high to low</option>
-          <option value="diff-asc">Price vs reference: low to high</option>
-          <option value="diff-desc">Price vs reference: high to low</option>
-          <option value="symbol-asc">Symbol: A–Z</option>
-          <option value="date-desc" selected>Latest buying first</option>
-        </select>
-      </label>
-    </section>
-
-    <section id="filter-sheet" class="filter-sheet" aria-label="Filters" hidden>
-      <div class="filter-sheet-head"><div><strong>Refine results</strong><span>Use one or more filters</span></div><button id="filter-close" class="icon-btn" type="button" aria-label="Close filters">×</button></div>
-      <div class="filter-group"><span class="filter-label">Price vs promoter reference</span><div class="filter-options" data-filter-group="band">
-        <button class="filter-option is-active" data-filter="band" data-value="all">All</button>
-        <button class="filter-option" data-filter="band" data-value="below">Below reference</button>
-        <button class="filter-option" data-filter="band" data-value="within10">0–10%</button>
-        <button class="filter-option" data-filter="band" data-value="within20">11–20%</button>
-        <button class="filter-option" data-filter="band" data-value="within30">21–30%</button>
-        <button class="filter-option" data-filter="band" data-value="beyond30">&gt;30%</button>
-      </div></div>
-      <div class="filter-group"><span class="filter-label">Category</span><div class="filter-options" data-filter-group="category">
-        <button class="filter-option is-active" data-filter="category" data-value="all">All</button>
-        <button class="filter-option" data-filter="category" data-value="Strong Buy Setup">Strong Buy</button>
-        <button class="filter-option" data-filter="category" data-value="Buy on Breakout">Breakout</button>
-        <button class="filter-option" data-filter="category" data-value="Watchlist">Watchlist</button>
-        <button class="filter-option" data-filter="category" data-value="Fundamental Watch">Fundamental Watch</button>
-        <button class="filter-option" data-filter="category" data-value="Avoid">Avoid</button>
-      </div></div>
-      <div class="filter-sheet-actions"><button id="filter-reset" class="btn-secondary" type="button">Clear all</button><button id="filter-apply" class="btn-primary" type="button">Apply filters</button></div>
-    </section>
-
-    <div class="scan-results-head"><div><strong id="result-count">Loading…</strong><span id="result-note"></span></div></div>
-
-    <div id="scan-loading" class="scan-loading" aria-live="polite"><span class="loading-spinner" aria-hidden="true"></span> Loading scan results…</div>
-    <div id="scan-error" class="scan-error" hidden role="alert"><strong>Couldn't load this scan.</strong><span>Please refresh the page and try again.</span></div>
-
-    <section id="scan-panel" role="tabpanel" aria-label="Scan results">
-      <div id="stock-cards" class="stock-cards"></div>
-      <div class="desktop-table-wrap">
-        <table id="scan-table" class="research-table" aria-label="Stock scan results">
-          <thead><tr>
-            <th>Stock</th><th>Score</th><th>Setup</th><th>CMP</th><th>Ref.</th><th>Δ%</th><th>Promoter</th><th>Buy value</th><th>Date</th><th></th>
-          </tr></thead>
-          <tbody id="scan-tbody"></tbody>
-        </table>
-      </div>
-      <div id="scan-empty" class="scan-empty" hidden><div class="scan-empty-icon">⌕</div><strong>No stocks match these filters</strong><span>Try clearing a filter or searching for another symbol.</span><button id="empty-reset" class="btn-secondary" type="button">Clear filters</button></div>
-    </section>
+    <div class="scan-tabs" role="tablist" aria-label="Scan result views"><button class="scan-tab is-active" role="tab" aria-selected="true" aria-controls="scan-panel" data-view="shortlist">Shortlist <span class="scan-tab-count">{{ shortlist_count }}</span></button><button class="scan-tab" role="tab" aria-selected="false" aria-controls="scan-panel" data-view="candidates">All Reviewed <span class="scan-tab-count">{{ reviewed_count }}</span></button></div>
+    <section class="scan-toolbar" aria-label="Scan controls"><div class="scan-search-wrap"><svg class="scan-search-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="scan-search" type="search" autocomplete="off" placeholder="Search stock or company…" aria-label="Search stocks" /><button id="clear-search" class="icon-btn" type="button" aria-label="Clear search" hidden>×</button></div><button id="filter-toggle" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filter-sheet"><span aria-hidden="true">☷</span> Filters <span id="filter-count" class="filter-count" hidden>0</span></button><label class="sort-select-wrap" for="scan-sort">Sort<select id="scan-sort" aria-label="Sort results"><option value="score-desc">Score: high to low</option><option value="value-desc">Promoter buying: high to low</option><option value="diff-asc">Price vs reference: low to high</option><option value="diff-desc">Price vs reference: high to low</option><option value="symbol-asc">Symbol: A–Z</option><option value="date-desc" selected>Latest buying first</option></select></label></section>
+    <section id="filter-sheet" class="filter-sheet" aria-label="Filters" hidden><div class="filter-sheet-head"><div><strong>Refine results</strong><span>Use one or more filters</span></div><button id="filter-close" class="icon-btn" type="button" aria-label="Close filters">×</button></div><div class="filter-group"><span class="filter-label">Price vs promoter reference</span><div class="filter-options" data-filter-group="band"><button class="filter-option is-active" data-filter="band" data-value="all">All</button><button class="filter-option" data-filter="band" data-value="below">Below reference</button><button class="filter-option" data-filter="band" data-value="within10">0–10%</button><button class="filter-option" data-filter="band" data-value="within20">11–20%</button><button class="filter-option" data-filter="band" data-value="within30">21–30%</button><button class="filter-option" data-filter="band" data-value="beyond30">&gt;30%</button></div></div><div class="filter-group"><span class="filter-label">Category</span><div class="filter-options" data-filter-group="category"><button class="filter-option is-active" data-filter="category" data-value="all">All</button><button class="filter-option" data-filter="category" data-value="Strong Buy Setup">Strong Buy</button><button class="filter-option" data-filter="category" data-value="Buy on Breakout">Breakout</button><button class="filter-option" data-filter="category" data-value="Watchlist">Watchlist</button><button class="filter-option" data-filter="category" data-value="Fundamental Watch">Fundamental Watch</button><button class="filter-option" data-filter="category" data-value="Avoid">Avoid</button></div></div><div class="filter-sheet-actions"><button id="filter-reset" class="btn-secondary" type="button">Clear all</button><button id="filter-apply" class="btn-primary" type="button">Apply filters</button></div></section>
+    <div class="scan-results-head"><div><strong id="result-count">Loading…</strong><span id="result-note"></span></div></div><div id="scan-loading" class="scan-loading" aria-live="polite"><span class="loading-spinner" aria-hidden="true"></span> Loading scan results…</div><div id="scan-error" class="scan-error" hidden role="alert"><strong>Couldn't load this scan.</strong><span>Please refresh the page and try again.</span></div>
+    <section id="scan-panel" role="tabpanel" aria-label="Scan results"><div id="stock-cards" class="stock-cards"></div><div class="desktop-table-wrap"><table id="scan-table" class="research-table" aria-label="Stock scan results"><thead><tr><th>Stock</th><th>Score</th><th>Setup</th><th>CMP</th><th>Ref.</th><th>Δ%</th><th>Promoter</th><th>Buy value</th><th>Date</th><th></th></tr></thead><tbody id="scan-tbody"></tbody></table></div><div id="scan-empty" class="scan-empty" hidden><div class="scan-empty-icon">⌕</div><strong>No stocks match these filters</strong><span>Try clearing a filter or searching for another symbol.</span><button id="empty-reset" class="btn-secondary" type="button">Clear filters</button></div></section>
   </main>
 </div>
-
-<!-- Stock detail: modal on desktop, full-screen research view on mobile -->
-<div id="stock-modal" class="stock-modal" hidden aria-hidden="true">
-  <div class="stock-modal-backdrop" data-close-modal></div>
-  <section class="stock-detail" role="dialog" aria-modal="true" aria-labelledby="detail-title">
-    <header class="stock-detail-header">
-      <button id="detail-back" class="detail-back" type="button"><span aria-hidden="true">←</span> Back to results</button>
-      <a id="detail-nse" class="detail-nse-link" href="#" target="_blank" rel="noopener noreferrer">NSE ↗</a>
-    </header>
-    <div id="detail-loading" class="detail-loading"><span class="loading-spinner" aria-hidden="true"></span> Loading analysis…</div>
-    <div id="detail-content" hidden>
-      <div class="detail-hero">
-        <div><span id="detail-category" class="detail-category"></span><h2 id="detail-title"></h2><p id="detail-company"></p></div>
-        <div class="detail-score-block"><div class="detail-score"><span id="detail-score">—</span><small>/100</small><span>RYB Score</span></div><div id="detail-score-meter"></div></div>
-      </div>
-      <div id="detail-why" class="why-card"></div>
-      <div class="detail-price-grid" id="detail-price-grid"></div>
-      <div class="detail-tabs" role="tablist" aria-label="Stock analysis sections">
-        <button class="detail-tab is-active" data-detail-tab="overview" role="tab" aria-selected="true">Overview</button>
-        <button class="detail-tab" data-detail-tab="promoter" role="tab" aria-selected="false">Promoter</button>
-        <button class="detail-tab" data-detail-tab="fundamentals" role="tab" aria-selected="false">Fundamentals</button>
-        <button class="detail-tab" data-detail-tab="technical" role="tab" aria-selected="false">Technical</button>
-        <button class="detail-tab" data-detail-tab="risk" role="tab" aria-selected="false">Risk</button>
-        <button class="detail-tab" data-detail-tab="transactions" role="tab" aria-selected="false">Transactions</button>
-      </div>
-      <div id="detail-panel" class="detail-panel"></div>
-    </div>
-  </section>
-</div>
+<div id="stock-modal" class="stock-modal" hidden aria-hidden="true"><div class="stock-modal-backdrop" data-close-modal></div><section class="stock-detail" role="dialog" aria-modal="true" aria-labelledby="detail-title"><div class="detail-watermark" aria-hidden="true">{{ ryb_watermark_svg }}</div><header class="stock-detail-header"><button id="detail-back" class="detail-back" type="button"><span aria-hidden="true">←</span> Back to results</button><a id="detail-nse" class="detail-nse-link" href="#" target="_blank" rel="noopener noreferrer">NSE ↗</a></header><div id="detail-loading" class="detail-loading"><span class="loading-spinner" aria-hidden="true"></span> Loading analysis…</div><div id="detail-content" hidden><div class="detail-hero"><div><h2 id="detail-title"></h2><p id="detail-company"></p><div id="detail-meta" class="detail-meta"></div></div><div class="detail-score-block"><span id="detail-category" class="detail-category"></span><div class="detail-score"><span id="detail-score">—</span><small>/100</small><span>RYB Score</span></div><div id="detail-score-meter"></div></div></div><div id="detail-why" class="why-card"></div><div class="detail-price-grid" id="detail-price-grid"></div><div class="detail-tabs" role="tablist" aria-label="Stock analysis sections"><button class="detail-tab is-active" data-detail-tab="overview" role="tab" aria-selected="true">Overview</button><button class="detail-tab" data-detail-tab="transactions" role="tab" aria-selected="false">Transactions</button></div><div id="detail-panel" class="detail-panel"></div></div></section></div>
 {% endblock %}
-
-{% block scripts %}
-<script src="{{ url_for('static', filename='js/scan.js') }}?v={{ scan_js_version }}" defer></script>
-{% endblock %}
+{% block scripts %}<script>
+(function(){
+  function initTransactionNavigation(){
+    var style=document.createElement('style');
+    style.textContent='.detail-tabs{display:none!important}.ov-link{display:none!important}.transaction-link{display:inline-block;margin-top:14px;color:#155eef;font-size:.72rem;font-weight:850;text-decoration:none}.transaction-link:after{content:" →";font-size:1rem}.transaction-link:hover{text-decoration:underline}.transaction-back-link{display:inline-block;margin-bottom:14px;color:#155eef;font-size:.72rem;font-weight:850;text-decoration:none}.transaction-back-link:before{content:"← ";font-size:1rem}.transaction-back-link:hover{text-decoration:underline}';
+    document.head.appendChild(style);
+    var observer=new MutationObserver(function(){
+      var flow=document.querySelector('.detail-decision-flow');
+      if(flow){
+        var promoter=flow.querySelector('.dd-card.promoter .promoter-inner');
+        if(promoter&&!promoter.querySelector('.transaction-link')){
+          var link=document.createElement('a');
+          link.href='#';
+          link.className='transaction-link';
+          link.textContent='View promoter transactions';
+          link.addEventListener('click',function(e){
+            e.preventDefault();
+            var tab=document.querySelector('.detail-tab[data-detail-tab="transactions"]');
+            if(tab)tab.click();
+          });
+          promoter.appendChild(link);
+        }
+      }
+      var active=document.querySelector('.detail-tab.is-active[data-detail-tab="transactions"]');
+      var panel=document.querySelector('#detail-panel');
+      if(active&&panel&&!panel.querySelector('.transaction-back-link')){
+        var back=document.createElement('a');
+        back.href='#';
+        back.className='transaction-back-link';
+        back.textContent='Back to stock overview';
+        back.addEventListener('click',function(e){
+          e.preventDefault();
+          var tab=document.querySelector('.detail-tab[data-detail-tab="overview"]');
+          if(tab)tab.click();
+          var detail=document.querySelector('.stock-detail');
+          if(detail)detail.scrollTop=0;
+          window.scrollTo(0,0);
+        });
+        panel.insertBefore(back,panel.firstChild);
+      }
+    });
+    observer.observe(document.body,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initTransactionNavigation);else initTransactionNavigation();
+})();
+</script><script src="{{ url_for('static', filename='js/scan.js') }}?v={{ scan_js_version }}" defer></script><script src="{{ url_for('static', filename='js/stock-detail-dashboard-v2.js') }}?v={{ scan_js_version }}" defer></script><script>
+(function(){
+  function enforceAnalysisScroll(){
+    var modal=document.getElementById('stock-modal');
+    var detail=modal&&modal.querySelector('.stock-detail');
+    if(!modal||!detail)return;
+    var css=document.getElementById('analysis-scroll-override');
+    if(!css){
+      css=document.createElement('style');
+      css.id='analysis-scroll-override';
+      css.textContent='#stock-modal.stock-modal{position:fixed!important;inset:0!important;height:100vh!important;max-height:100vh!important;overflow:hidden!important}#stock-modal.stock-modal[hidden]{display:none!important}#stock-modal.stock-modal:not([hidden]){display:flex!important}.stock-modal .stock-detail{height:100vh!important;max-height:100vh!important;min-height:0!important;overflow-y:scroll!important;overflow-x:hidden!important;scrollbar-width:auto!important;scrollbar-color:#94a3b8 #e2e8f0!important}.stock-modal .stock-detail::-webkit-scrollbar{width:12px!important}.stock-modal .stock-detail::-webkit-scrollbar-track{background:#e2e8f0!important}.stock-modal .stock-detail::-webkit-scrollbar-thumb{background:#94a3b8!important;border-radius:8px!important;border:2px solid #e2e8f0!important}.stock-modal .stock-detail::-webkit-scrollbar-thumb:hover{background:#64748b!important}';
+      document.head.appendChild(css);
+    }
+    detail.style.setProperty('height','100vh','important');
+    detail.style.setProperty('max-height','100vh','important');
+    detail.style.setProperty('min-height','0','important');
+    detail.style.setProperty('overflow-y','scroll','important');
+    detail.style.setProperty('overflow-x','hidden','important');
+    modal.style.setProperty('overflow','hidden','important');
+  }
+  window.addEventListener('load',enforceAnalysisScroll);
+  document.addEventListener('click',function(e){
+    if(e.target.closest('[data-stock],#detail-back,.transaction-link,.transaction-back-link'))setTimeout(enforceAnalysisScroll,0);
+  });
+})();
+</script><script>
+(function(){
+  function esc(v){return String(v==null?'':v).replace(/[&<>\"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'})[c];});}
+  function num(v){return v!==null&&v!==''&&Number.isFinite(Number(v))?Number(v):null;}
+  function fmt(v,d){var n=num(v);return n===null?'Not available':n.toFixed(d==null?1:d);}
+  function pct(v){var n=num(v);return n===null?'Not available':(n>0?'+':'')+n.toFixed(1)+'%';}
+  function money(v){var n=num(v);return n===null?'Not available':'₹'+n.toLocaleString('en-IN',{maximumFractionDigits:2});}
+  function replaceRisk(row){
+    var panel=document.querySelector('#detail-panel');
+    if(!panel||!row)return;
+    var cards=Array.prototype.slice.call(panel.querySelectorAll('.overview-card'));
+    var riskCard=cards.find(function(card){var h=card.querySelector('.ov-head strong');return h&&h.textContent.trim()==='Risk';});
+    if(!riskCard)return;
+    var pledge=!!row.has_pledging;
+    var de=num(row.de_ratio), holding=num(row.promo_holding), opm=num(row.opm_pct), pe=num(row.pe), deviation=num(row.price_diff_pct);
+    var highDebt=de!==null&&de>1;
+    var lowHolding=holding!==null&&holding<60;
+    var thinMargin=opm!==null&&opm<5;
+    var highPe=pe!==null&&pe>60;
+    var deviationHigh=deviation!==null&&Math.abs(deviation)>30;
+    var unavailable=[];
+    if(de===null)unavailable.push('debt');
+    if(holding===null)unavailable.push('promoter holding');
+    if(opm===null)unavailable.push('operating margin');
+    if(pe===null)unavailable.push('P/E');
+    var riskCount=(pledge?2:0)+(highDebt?2:0)+(lowHolding?2:0)+(thinMargin?1:0)+(highPe?1:0)+(deviationHigh?1:0);
+    var overall=riskCount>=4?'High':riskCount>=2?'Moderate':'Low';
+    var overallClass=overall==='Low'?'good badge':'';
+    function rowHtml(label,value,cls){return '<div class="ov-row"><span>'+esc(label)+'</span><b class="'+(cls||'')+'">'+esc(value)+'</b></div>';}
+    var html='<div class="ov-head"><span class="dd-icon">⚠</span><div><strong>Risk</strong><small>Data-driven risk assessment</small></div></div>';
+    html+=rowHtml('Promoter pledge',pledge?'Yes — pledge event detected':'No — passed NSE pledge filter',pledge?'':'good');
+    html+=rowHtml('Debt / Equity',de===null?'Not available':fmt(de,2)+(highDebt?' — high':' — within range'),highDebt?'':'good');
+    html+=rowHtml('Promoter holding',holding===null?'Not available':fmt(holding,1)+'%'+(lowHolding?' — low':' — screen passed'),lowHolding?'':'good');
+    html+=rowHtml('Operating margin',opm===null?'Not available':fmt(opm,1)+'%'+(thinMargin?' — thin':' — healthy'),thinMargin?'':'good');
+    html+=rowHtml('P/E',pe===null?'Not available':fmt(pe,1)+(highPe?' — high':' — not elevated'),highPe?'':'good');
+    html+=rowHtml('Price vs promoter avg',deviation===null?'Not available':pct(deviation)+(deviationHigh?' — elevated':' — normal')); 
+    html+=rowHtml('Governance concern','Not assessed','');
+    html+=rowHtml('Overall risk',overall+' risk'+(unavailable.length?' · '+unavailable.length+' data point(s) unavailable':''),overallClass);
+    riskCard.innerHTML=html;
+    riskCard.dataset.riskRefresh='1';
+  }
+  function refreshRisk(){
+    var title=document.querySelector('#detail-title');
+    var root=document.querySelector('.scan-page');
+    if(!title||!root)return;
+    var symbol=title.textContent.trim();
+    if(!symbol)return;
+    fetch('/api/scan/'+root.dataset.scanDate+'/stock/'+encodeURIComponent(symbol)).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(replaceRisk).catch(function(){});
+  }
+  var observer=new MutationObserver(function(){
+    var panel=document.querySelector('#detail-panel');
+    if(panel&&panel.querySelector('.overview-card')&&!panel.querySelector('.overview-card[data-risk-refresh="1"]'))refreshRisk();
+  });
+  observer.observe(document.body,{childList:true,subtree:true});
+  document.addEventListener('click',function(e){if(e.target.closest('[data-stock]'))setTimeout(refreshRisk,250);});
+})();
+</script>{% endblock %}

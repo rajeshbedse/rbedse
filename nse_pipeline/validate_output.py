@@ -46,13 +46,26 @@ FULL_REQUIRED_COLUMNS = {
     "Category",
 }
 
+TIMING_REQUIRED_COLUMNS = {
+    "PromoterAvgPrice",
+    "CMPvsPromoterAvgPct",
+    "Freshness",
+    "AccumulationStage",
+    "SignalStage",
+    "FirstBuyDate",
+    "LastBuyDate",
+    "AccumulationDays",
+    "DaysSinceLastBuy",
+    "BuyTxn30D",
+}
+
 
 def _read_csv(path: Path) -> pd.DataFrame:
     return pd.read_csv(path, encoding="utf-8-sig")
 
 
 def validate(run_dir: Path) -> list[str]:
-    """Validate one daily pipeline output directory."""
+    """Validate one daily NSE pipeline output directory."""
 
     errors: list[str] = []
     warnings: list[str] = []
@@ -60,9 +73,6 @@ def validate(run_dir: Path) -> list[str]:
     if not run_dir.is_dir():
         return [f"Output directory does not exist: {run_dir}"]
 
-    # ------------------------------------------------------------------
-    # Required files
-    # ------------------------------------------------------------------
     missing = [
         name
         for name in REQUIRED_FILES
@@ -74,9 +84,6 @@ def validate(run_dir: Path) -> list[str]:
             "Missing required files: " + ", ".join(missing)
         )
 
-    # ------------------------------------------------------------------
-    # meta.json
-    # ------------------------------------------------------------------
     meta_path = run_dir / "meta.json"
     meta: dict = {}
 
@@ -88,8 +95,6 @@ def validate(run_dir: Path) -> list[str]:
         except Exception as exc:
             errors.append(f"Invalid meta.json: {exc}")
 
-    # New snapshots must have status=success.
-    # Older historical snapshots may not contain the status field.
     status = meta.get("status")
 
     if status is None:
@@ -104,9 +109,6 @@ def validate(run_dir: Path) -> list[str]:
             f"meta.json status is not success: {status!r}"
         )
 
-    # ------------------------------------------------------------------
-    # File paths
-    # ------------------------------------------------------------------
     raw_path = run_dir / CSV_FILENAME
     full_path = run_dir / FULL_CSV_FILENAME
     trades_path = run_dir / TRADES_CSV_FILENAME
@@ -116,9 +118,6 @@ def validate(run_dir: Path) -> list[str]:
     full = None
     trades = None
 
-    # ------------------------------------------------------------------
-    # Raw NSE insider-trading CSV
-    # ------------------------------------------------------------------
     if raw_path.is_file():
         try:
             raw = _read_csv(raw_path)
@@ -139,9 +138,6 @@ def validate(run_dir: Path) -> list[str]:
         except Exception as exc:
             errors.append(f"Cannot read raw CSV: {exc}")
 
-    # ------------------------------------------------------------------
-    # Enriched CSV
-    # ------------------------------------------------------------------
     if full_path.is_file():
         try:
             full = _read_csv(full_path)
@@ -153,6 +149,19 @@ def validate(run_dir: Path) -> list[str]:
                     "Enriched CSV missing columns: "
                     + ", ".join(sorted(missing_cols))
                 )
+
+            missing_timing = TIMING_REQUIRED_COLUMNS - set(full.columns)
+            if missing_timing:
+                errors.append(
+                    "Enriched CSV missing promoter timing columns: "
+                    + ", ".join(sorted(missing_timing))
+                )
+            elif not full.empty:
+                freshness = full["Freshness"].fillna("No Signal").astype(str)
+                if not freshness.ne("No Signal").any():
+                    errors.append(
+                        "Enriched CSV contains no populated promoter timing signals"
+                    )
 
             if full.empty:
                 errors.append(
@@ -179,9 +188,6 @@ def validate(run_dir: Path) -> list[str]:
         except Exception as exc:
             errors.append(f"Cannot read enriched CSV: {exc}")
 
-    # ------------------------------------------------------------------
-    # Promoter trades CSV
-    # ------------------------------------------------------------------
     if trades_path.is_file():
         try:
             trades = _read_csv(trades_path)
@@ -196,9 +202,6 @@ def validate(run_dir: Path) -> list[str]:
                 f"Cannot read promoter trades CSV: {exc}"
             )
 
-    # ------------------------------------------------------------------
-    # Cross-file consistency
-    # ------------------------------------------------------------------
     if (
         raw is not None
         and full is not None
@@ -210,9 +213,6 @@ def validate(run_dir: Path) -> list[str]:
             "zero candidates"
         )
 
-    # ------------------------------------------------------------------
-    # Metadata counts
-    # ------------------------------------------------------------------
     if meta:
         try:
             meta_raw = int(meta.get("raw_filings", -1))
@@ -250,9 +250,6 @@ def validate(run_dir: Path) -> list[str]:
                 "meta.json contains invalid numeric counts"
             )
 
-    # ------------------------------------------------------------------
-    # Excel structure
-    # ------------------------------------------------------------------
     if excel_path.is_file():
         try:
             sheets = pd.ExcelFile(
@@ -278,9 +275,6 @@ def validate(run_dir: Path) -> list[str]:
                 f"Cannot open Excel output: {exc}"
             )
 
-    # ------------------------------------------------------------------
-    # Result
-    # ------------------------------------------------------------------
     if errors:
         print("VALIDATION FAILED")
 

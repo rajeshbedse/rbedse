@@ -3,8 +3,16 @@ name: DEV NSE Scan
 on:
   workflow_dispatch:
     inputs:
+      data_mode:
+        description: "Choose whether to reuse existing data or run a fresh NSE scrape"
+        required: true
+        default: reuse_existing
+        type: choice
+        options:
+          - reuse_existing
+          - refresh_nse
       run_date:
-        description: "Run date (YYYY-MM-DD). Leave blank for today."
+        description: "Snapshot date (YYYY-MM-DD). In reuse mode, blank = latest available snapshot."
         required: false
         type: string
 
@@ -24,22 +32,25 @@ jobs:
 
     steps:
       - name: Checkout DEV branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: dev-latest
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        if: inputs.data_mode == 'refresh_nse'
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: requirements-pipeline.txt
 
       - name: Install pipeline dependencies
+        if: inputs.data_mode == 'refresh_nse'
         run: python -m pip install -r requirements-pipeline.txt
 
       - name: Install Chromium and virtual display
+        if: inputs.data_mode == 'refresh_nse'
         run: |
           python -m playwright install --with-deps chromium
           sudo apt-get update
@@ -50,36 +61,71 @@ jobs:
         shell: bash
         env:
           INPUT_DATE: ${{ inputs.run_date }}
+          DATA_MODE: ${{ inputs.data_mode }}
         run: |
           if [ -n "$INPUT_DATE" ]; then
             echo "run_date=$INPUT_DATE" >> "$GITHUB_OUTPUT"
-            echo "Run mode: manual"
             echo "Report date: $INPUT_DATE"
+          elif [ "$DATA_MODE" = "reuse_existing" ]; then
+            RUN_DATE=$(find output -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null \
+              | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' \
+              | sort -r \
+              | while read -r d; do
+                  if [ -f "output/$d/enriched_analysis.xlsx" ] || [ -f "output/$d/enriched_full.csv" ]; then
+                    echo "$d"
+                    break
+                  fi
+                done)
+            if [ -z "$RUN_DATE" ]; then
+              echo "No existing scan snapshot is available in output/."
+              exit 1
+            fi
+            echo "run_date=$RUN_DATE" >> "$GITHUB_OUTPUT"
+            echo "Reusing existing snapshot: $RUN_DATE"
           else
             echo "run_date=$(TZ=Asia/Kolkata date +%F)" >> "$GITHUB_OUTPUT"
-            echo "Run mode: manual default"
-            echo "Report date: current IST day"
+            echo "Fresh NSE run date: $(TZ=Asia/Kolkata date +%F)"
           fi
 
       - name: Run DEV NSE pipeline
+        if: inputs.data_mode == 'refresh_nse'
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           xvfb-run -a python -m nse_pipeline.pipeline --date "${{ steps.date.outputs.run_date }}"
 
       - name: Build promoter transaction history
+        if: inputs.data_mode == 'refresh_nse'
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           python -m nse_pipeline.promoter_history --date "${{ steps.date.outputs.run_date }}"
 
+      - name: Enforce promoter timing output
+        if: inputs.data_mode == 'refresh_nse'
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python -m nse_pipeline.ensure_timing --date "${{ steps.date.outputs.run_date }}"
+
       - name: Validate generated snapshot
+        if: inputs.data_mode == 'refresh_nse'
         run: |
           RUN_DATE="${{ steps.date.outputs.run_date }}"
           ls -lah "output/${RUN_DATE}/"
           python -m nse_pipeline.validate_output --date "${RUN_DATE}"
 
+      - name: Check existing snapshot
+        if: inputs.data_mode == 'reuse_existing'
+        run: |
+          RUN_DATE="${{ steps.date.outputs.run_date }}"
+          echo "Reusing existing DEV snapshot: ${RUN_DATE}"
+          test -f "output/${RUN_DATE}/enriched_analysis.xlsx" || test -f "output/${RUN_DATE}/enriched_full.csv"
+          ls -lah "output/${RUN_DATE}/"
+          echo "Existing snapshot is available; no NSE scraping or pipeline execution was performed."
+
       - name: Publish DEV snapshot to DEV branch only
+        if: inputs.data_mode == 'refresh_nse'
         env:
           RUN_DATE: ${{ steps.date.outputs.run_date }}
         run: |

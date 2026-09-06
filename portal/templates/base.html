@@ -1,68 +1,126 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="robots" content="index, follow" />
-  <title>{% block title %}RYB Finserv — Research Portal{% endblock %}</title>
-  <meta name="description" content="{% block meta_desc %}RYB Finserv is an independent research platform. Explore quality-screened stock research reports.{% endblock %}" />
-  <link rel="icon" href="{{ url_for('static', filename='icons/favicon.svg') }}" type="image/svg+xml" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ css_version }}" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/daily-ui.css') }}?v={{ css_version }}-daily3" />
-  {% block head_extra %}{% endblock %}
+{% extends "base_legacy.html" %}
 
-  <!-- Google Analytics 4 -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-0752V41GMF"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-0752V41GMF', {
-      page_title: document.title,
-      send_page_view: true
-    });
-  </script>
-</head>
-<body>
-  {{ ryb_watermark_svg }}
-  <a href="#main-content" class="skip-link">Skip to main content</a>
-  <header class="site-header" role="banner"><div class="container header-inner">
-    <a href="{{ url_for('index') }}" class="logo" aria-label="RYB Finserv home"><span class="logo-mark" aria-hidden="true">{{ ryb_logo_svg(size=32, id_suffix="h") }}</span><span class="logo-text">RYB <strong>Finserv</strong></span></a>
-    <nav class="site-nav" aria-label="Primary navigation" id="site-nav"><a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">Dashboard</a><a href="#about" class="nav-link">About</a></nav>
-    <div class="header-actions"><span class="badge-research">Research Use Only</span><button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav" id="nav-toggle"><span class="hamburger" aria-hidden="true"></span></button></div>
-  </div></header>
-  <main id="main-content" tabindex="-1">{% block content %}{% endblock %}</main>
-  <footer class="site-footer" id="about" role="contentinfo">
-    <div class="footer-top"><div class="container footer-top-inner">
-      <div class="footer-col footer-col--brand"><a href="{{ url_for('index') }}" class="logo logo-footer" aria-label="RYB Finserv home"><span class="logo-mark" aria-hidden="true">{{ ryb_logo_svg(size=28, id_suffix="f") }}</span><span class="logo-text">RYB <strong>Finserv</strong></span></a><p class="footer-tagline">Conviction. Quantified.</p><p class="footer-tagline-sub">Daily equity research for the discerning investor.</p></div>
-      <div class="footer-col"><h3 class="footer-col-heading">About</h3><p class="footer-col-text">RYB Finserv is an independent research platform that applies a proprietary multi-factor methodology to identify high-conviction equity opportunities from publicly available regulatory disclosures.</p></div>
-      <div class="footer-col"><h3 class="footer-col-heading">Contact</h3><ul class="footer-links"><li><a href="mailto:ryb.finserv@gmail.com" class="footer-link-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>ryb.finserv@gmail.com</a></li><li><span class="footer-link-item footer-link-item--plain"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1-4-10z"/></svg>India</span></li></ul></div>
-    </div></div>
-    <div class="footer-bottom"><div class="container footer-bottom-inner"><p class="footer-disclaimer-text"><strong>Disclaimer:</strong> This portal is for <em>research and informational purposes only</em>. All information is derived from publicly available regulatory disclosures. It does not constitute financial advice or a recommendation to buy or sell any security. Past activity does not guarantee future returns. Always consult a SEBI-registered investment advisor before making any investment decision.</p><p class="footer-copy">&copy; {{ now_year }} RYB Finserv. All rights reserved.</p></div></div>
-  </footer>
-  <script src="{{ url_for('static', filename='js/main.js') }}?v={{ main_js_version }}" defer></script>
-  {% block scripts %}{% endblock %}
-  <script>
-    // RYB-specific GA4 interaction events. Uses event delegation so it also
-    // captures dynamically rendered stock-detail controls.
-    document.addEventListener('click', function (event) {
-      if (typeof gtag !== 'function') return;
-      const target = event.target.closest('a, button');
-      if (!target) return;
+{% block head_extra %}
+  {{ super() }}
+  <style id="global-watermark-layer">
+    body > svg[aria-hidden="true"] {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      pointer-events: none !important;
+      z-index: 0 !important;
+      opacity: .06 !important;
+      overflow: visible !important;
+    }
+    body > .skip-link,
+    body > .site-header,
+    body > main,
+    body > .site-footer {
+      position: relative;
+      z-index: 1;
+    }
 
-      if (target.matches('.hero-cta a.btn-primary')) {
-        gtag('event', 'latest_scan_click', { destination: target.getAttribute('href') || '' });
-      } else if (target.matches('.scan-row')) {
-        gtag('event', 'research_report_view', { scan_date: target.getAttribute('href')?.split('/').pop() || '' });
-      } else if (target.matches('.stock-card-main')) {
-        gtag('event', 'stock_detail_view', { stock_symbol: target.dataset.stock || '' });
-      } else if (target.matches('.scan-tab')) {
-        gtag('event', 'scan_tab_view', { view: target.dataset.view || '' });
+    /* Shortlist status colors are translucent, so the watermark remains visible through them. */
+    .stock-cards .stock-card.is-shortlisted .stock-card-main,
+    .stock-cards .stock-card.is-shortlisted .research-card-main {
+      background: rgba(244, 251, 246, .72) !important;
+    }
+    .stock-cards .stock-card:not(.is-shortlisted) .stock-card-main,
+    .stock-cards .stock-card:not(.is-shortlisted) .research-card-main {
+      background: rgba(254, 244, 244, .72) !important;
+    }
+    .stock-cards .stock-card {
+      background: transparent !important;
+    }
+
+    .stock-modal { z-index: 1000; background: transparent !important; }
+    .stock-modal-backdrop { background: #f7f9fc !important; }
+    .stock-detail {
+      background: transparent !important;
+      position: relative !important;
+    }
+    .stock-detail > .detail-watermark {
+      display: block !important;
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      pointer-events: none !important;
+      z-index: 0 !important;
+    }
+    .stock-detail > .detail-watermark > svg {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      pointer-events: none !important;
+      opacity: .06 !important;
+      overflow: visible !important;
+    }
+    .stock-detail > :not(.detail-watermark) {
+      position: relative;
+      z-index: 1;
+    }
+  </style>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var overrideCss = [
+        '.stock-modal{background:transparent!important}',
+        '.stock-modal-backdrop{background:#f7f9fc!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
+        '.stock-modal .stock-detail{background:transparent!important;isolation:auto!important;overflow-y:auto!important;overflow-x:hidden!important}',
+        '.stock-modal .stock-detail>.detail-watermark{display:block!important;position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;overflow:visible!important;pointer-events:none!important;z-index:0!important}',
+        '.stock-modal .stock-detail>.detail-watermark>svg{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;transform:none!important;overflow:visible!important;pointer-events:none!important;opacity:.06!important;z-index:0!important}',
+        '.stock-modal .stock-detail>.stock-detail-header{background:rgba(255,255,255,.86)!important}',
+        '.stock-modal .stock-detail> :not(.detail-watermark){position:relative;z-index:1}',
+        '.stock-modal .stock-detail .detail-tabs{background:rgba(255,255,255,.86)!important}',
+        '.stock-modal .stock-detail .detail-score-block{background:transparent!important;background-image:none!important}',
+        '.stock-modal .stock-detail .dd-card{background:transparent!important;background-image:none!important}',
+        '.stock-modal .stock-detail .dd-card.promoter{background:transparent!important;background-image:none!important}',
+        '.stock-modal .stock-detail .activity-grid{background:transparent!important;background-image:none!important}',
+        '.stock-modal .stock-detail .activity{background:transparent!important;background-image:none!important}',
+        '.stock-modal .stock-detail .overview-card{background:transparent!important;background-image:none!important}'
+      ].join('');
+
+      function installAnalysisWatermarkOverride() {
+        if (!document.head || !document.getElementById('stock-modal')) return;
+        var old = document.getElementById('analysis-watermark-runtime-override');
+        if (old) old.remove();
+        var style = document.createElement('style');
+        style.id = 'analysis-watermark-runtime-override';
+        style.textContent = overrideCss;
+        document.head.appendChild(style);
       }
-    });
+
+      function watchAnalysisStyles() {
+        installAnalysisWatermarkOverride();
+        if (!document.head) return;
+        var observer = new MutationObserver(function (mutations) {
+          var changed = mutations.some(function (m) {
+            return Array.prototype.some.call(m.addedNodes, function (node) {
+              return node !== document.getElementById('analysis-watermark-runtime-override');
+            });
+          });
+          if (!changed) return;
+          observer.disconnect();
+          installAnalysisWatermarkOverride();
+          observer.observe(document.head, { childList: true });
+        });
+        observer.observe(document.head, { childList: true });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', watchAnalysisStyles, { once: true });
+      } else {
+        watchAnalysisStyles();
+      }
+    })();
   </script>
-</body>
-</html>
+
+  <script src="{{ url_for('static', filename='js/scan.js') }}?v={{ scan_js_version }}" defer></script>
+  <script src="{{ url_for('static', filename='js/stock-detail-dashboard-v2.js') }}?v={{ scan_js_version }}" defer></script>
+  <script src="{{ url_for('static', filename='js/scan-layout-fixes.js') }}?v={{ scan_js_version }}" defer></script>
+{% endblock %}

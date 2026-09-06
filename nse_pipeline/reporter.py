@@ -31,6 +31,14 @@ SCORE_COLS = [
     "RevGrowthPct", "EBITDAGrowthPct", "PATGrowthPct", "EPSGrowthPct",
     "ROCEPct", "DE_Ratio", "OCFPositive", "OPMPct",
     "DMA50", "DMA200", "SixMonthReturn",
+    # Promoter timing is descriptive only; it never changes Score/Category.
+    "PromoterAvgPrice", "CMPvsPromoterAvgPct", "Freshness", "AccumulationStage",
+    "SignalStage", "FirstBuyDate", "LastBuyDate", "AccumulationDays",
+    "DaysSinceFirstBuy", "DaysSinceLastBuy", "BuyTxn7D", "BuyTxn15D",
+    "BuyTxn30D", "BuyTxn60D", "BuyTxn90D", "BuyValue7D", "BuyValue15D",
+    "BuyValue30D", "BuyValue60D", "BuyValue90D", "NetBuyValue7D",
+    "NetBuyValue30D", "UniquePromotersBuying", "UniquePromotersSelling",
+    "BuyAcceleration",
 ]
 
 
@@ -61,7 +69,6 @@ def _compute_bands(final: pd.DataFrame) -> list[dict]:
             "count"    : int(mask.sum()),
         })
         prev = band
-    # Beyond-all-bands bucket
     last_band = bands[-1]
     beyond_mask = final["AbsDiffPct"] > last_band
     result.append({
@@ -101,7 +108,6 @@ def run(final: pd.DataFrame, excel_path: Path) -> None:
 
     bands = _compute_bands(final)
 
-    # Print proximity sections (skip the "beyond" catch-all from log output)
     for b in bands[:-1]:
         _section(final[b["mask"]], b["log_label"])
 
@@ -110,7 +116,6 @@ def run(final: pd.DataFrame, excel_path: Path) -> None:
         "⭐  PRICE BELOW PROMOTER AVG BUY — Trading cheaper than what promoter paid",
     )
 
-    # Print score-sorted table
     log.info("\n%s", "=" * 90)
     log.info(
         "SCORED TABLE — %d symbols | sorted by Score descending\n"
@@ -122,22 +127,18 @@ def run(final: pd.DataFrame, excel_path: Path) -> None:
     score_display_cols = [c for c in SCORE_COLS if c in final.columns]
     log.info("\n%s", final[score_display_cols].to_string(index=False))
 
-    # ── Excel export ─────────────────────────────────────────────────────────
     excel_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Band-count summary rows
     summary_rows = [{"Band": b["label"], "Count": b["count"]} for b in bands]
     summary_rows.append({
         "Band":  "Below avg buy price",
         "Count": int((final["PriceDiffPct"] < 0).sum()),
     })
-    # Category-count summary
     if "Category" in final.columns:
         for cat, grp in final.groupby("Category"):
             summary_rows.append({"Band": f"[Category] {cat}", "Count": len(grp)})
 
     with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
-        # Sheet 1: ScoredStocks — full scored dataset
         scored_cols = [c for c in SCORE_COLS if c in final.columns]
         final[scored_cols].to_excel(writer, index=False, sheet_name="ScoredStocks")
         ws1 = writer.sheets["ScoredStocks"]
@@ -146,7 +147,6 @@ def run(final: pd.DataFrame, excel_path: Path) -> None:
                 max(len(str(c.value or "")) for c in col) + 4, 45
             )
 
-        # Sheet 2: FilteredStocks — backward-compatible original columns
         final[REPORT_COLS].to_excel(writer, index=False, sheet_name="FilteredStocks")
         ws2 = writer.sheets["FilteredStocks"]
         for col in ws2.columns:
@@ -154,7 +154,6 @@ def run(final: pd.DataFrame, excel_path: Path) -> None:
                 max(len(str(c.value or "")) for c in col) + 4, 45
             )
 
-        # Sheet 3: Summary
         pd.DataFrame(summary_rows).to_excel(writer, index=False, sheet_name="Summary")
 
     log.info("Excel exported → %s", excel_path)
