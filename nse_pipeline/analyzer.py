@@ -261,55 +261,84 @@ def _download_bhavcopy(max_lookback: int = 5, as_of_date: date | None = None) ->
 
 
 _WEEK52_BASE = "https://nsearchives.nseindia.com/content/equities/CM_52_wk_High_low_{date}.csv"
-_WEEK52_HEADERS = {"User-Agent": USER_AGENT, "Accept": "*/*", "Referer": "https://www.nseindia.com/"}
+_WEEK52_API = "https://www.nseindia.com/api/daily-reports?key=CM"
+_WEEK52_HEADERS = {"User-Agent": USER_AGENT, "Accept": "application/json, text/plain, */*", "Referer": "https://www.nseindia.com/all-reports"}
+
+
+def _parse_52_week_rows(text: str) -> dict[str, dict[str, float | None]]:
+    rows = _csv.DictReader(text.splitlines())
+    result: dict[str, dict[str, float | None]] = {}
+    for row in rows:
+        sym = (row.get("SYMBOL") or row.get("Symbol") or row.get("TckrSymb") or "").strip()
+        if not sym:
+            continue
+
+        def _report_num(*keys):
+            for key in keys:
+                raw = row.get(key)
+                if raw not in (None, "", "-", "NA"):
+                    try:
+                        return float(str(raw).replace(",", "").strip())
+                    except (ValueError, TypeError):
+                        pass
+            return None
+
+        result[sym] = {
+            "52WeekHigh": _report_num("Adjusted 52_Week_High", "Adjusted_52_Week_High"),
+            "52WeekLow": _report_num("Adjusted 52_Week_Low", "Adjusted_52_Week_Low"),
+        }
+    return result
 
 
 def _download_52_week_report(max_lookback: int = 5, as_of_date: date | None = None) -> dict[str, dict[str, float | None]] | None:
-    """Download NSE's separate CM 52-week high/low report.
-
-    The report contains adjusted 52-week high/low values, which are preferred
-    here because they are corporate-action adjusted and are published by NSE.
-    """
+    """Download NSE's 52 Week High Low Report using NSE's report-discovery API."""
     session = requests.Session()
     session.headers.update(_WEEK52_HEADERS)
     today = as_of_date or date.today()
+
+    # NSE's daily-reports API is the authoritative way to discover the current
+    # report URL. It avoids relying on a hardcoded archive path that NSE may move.
+    try:
+        api = session.get(_WEEK52_API, timeout=20)
+        if api.status_code == 200:
+            payload = api.json()
+            candidates = payload.get("CurrentDay", []) + payload.get("PreviousDay", [])
+            target_dates = {today.strftime("%d-%b-%Y")}
+            # On weekends/holidays the API may expose the latest trading day.
+            if as_of_date is None:
+                target_dates = {item.get("tradingDate") for item in candidates if item.get("tradingDate")}
+            for item in candidates:
+                if item.get("fileKey") != "CM-52 WEEK-HIGH_LOW":
+                    continue
+                if item.get("tradingDate") not in target_dates and as_of_date is not None:
+                    continue
+                url = f"{item.get('filePath', '')}{item.get('fileActlName', '')}"
+                resp = session.get(url, timeout=20)
+                if resp.status_code == 200:
+                    result = _parse_52_week_rows(resp.text)
+                    if result:
+                        log.info("  NSE 52-week report loaded via API for %s — %d symbols", item.get("tradingDate"), len(result))
+                        return result
+    except Exception as exc:
+        log.warning("  NSE 52-week report API fetch failed: %s", exc)
+
+    # Historical fallback for dates where the API no longer exposes the report.
     attempted: list[str] = []
     for delta in range(max_lookback + 1):
         d = today - timedelta(days=delta)
         if d.weekday() >= 5:
             continue
         ds = d.strftime("%d%m%Y")
-        url = _WEEK52_BASE.format(date=ds)
         attempted.append(ds)
         try:
-            resp = session.get(url, timeout=20)
-            if resp.status_code != 200:
-                continue
-            rows = _csv.DictReader(resp.text.splitlines())
-            result: dict[str, dict[str, float | None]] = {}
-            for row in rows:
-                sym = (row.get("Symbol") or row.get("SYMBOL") or row.get("TckrSymb") or "").strip()
-                if not sym:
-                    continue
-
-                def _report_num(*keys):
-                    for key in keys:
-                        raw = row.get(key)
-                        if raw not in (None, "", "-", "NA"):
-                            try:
-                                return float(str(raw).replace(",", "").strip())
-                            except (ValueError, TypeError):
-                                pass
-                    return None
-
-                result[sym] = {
-                    "52WeekHigh": _report_num("Adjusted_52_Week_High"),
-                    "52WeekLow": _report_num("Adjusted_52_Week_Low"),
-                }
-            log.info("  NSE 52-week report loaded for %s — %d symbols", d.strftime("%Y-%m-%d"), len(result))
-            return result
+            resp = session.get(_WEEK52_BASE.format(date=ds), timeout=20)
+            if resp.status_code == 200:
+                result = _parse_52_week_rows(resp.text)
+                if result:
+                    log.info("  NSE 52-week report loaded from archive for %s — %d symbols", d.strftime("%Y-%m-%d"), len(result))
+                    return result
         except Exception as exc:
-            log.warning("  NSE 52-week report fetch failed for %s: %s", ds, exc)
+            log.warning("  NSE 52-week report archive fetch failed for %s: %s", ds, exc)
     log.warning("  NSE 52-week report: no file found for dates %s", attempted)
     return None
 
