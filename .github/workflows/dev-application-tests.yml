@@ -81,11 +81,47 @@ jobs:
         run: python -m playwright install --with-deps chromium
 
       - name: Run single-stock UI regression
+        continue-on-error: true
         env:
           EXPECTED_COMMIT: ${{ inputs.expected_commit || github.sha }}
         run: python tests/stock_detail_regression.py --expected-commit "$EXPECTED_COMMIT"
 
+      - name: Diagnose DEV scan page JavaScript
+        if: always()
+        run: |
+          python - <<'PY'
+          import re
+          from urllib.parse import urljoin
+          from playwright.sync_api import sync_playwright
+          base = "https://ryb-finserv-dev.onrender.com"
+          import requests
+          home = requests.get(base + "/", timeout=30).text
+          m = re.search(r'href=["\'](/scan/[0-9]{4}-[0-9]{2}-[0-9]{2})["\']', home)
+          if not m:
+              raise SystemExit("No scan URL found")
+          url = urljoin(base, m.group(1))
+          console_errors=[]; page_errors=[]; failed=[]
+          with sync_playwright() as pw:
+              browser=pw.chromium.launch()
+              page=browser.new_page(viewport={"width":1440,"height":900})
+              page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+              page.on("pageerror", lambda exc: page_errors.append(str(exc)))
+              page.on("requestfailed", lambda req: failed.append(f"{req.method} {req.url}: {req.failure}"))
+              page.goto(url, wait_until="domcontentloaded", timeout=30000)
+              page.wait_for_timeout(5000)
+              print("DIAG scan URL:", url)
+              print("DIAG scan-loading hidden:", page.locator("#scan-loading").get_attribute("hidden"))
+              print("DIAG result-count:", page.locator("#result-count").inner_text())
+              print("DIAG stock-card count:", page.locator("#stock-cards [data-stock]").count())
+              print("DIAG console errors:", console_errors or "NONE")
+              print("DIAG page errors:", page_errors or "NONE")
+              print("DIAG failed requests:", failed or "NONE")
+              print("DIAG scan.js loaded:", page.evaluate("Array.from(document.scripts).some(s => s.src.includes('/static/js/scan.js'))"))
+              browser.close()
+          PY
+
       - name: Run DEV application checks
+        if: ${{ success() }}
         env:
           EXPECTED_COMMIT: ${{ inputs.expected_commit || github.sha }}
         run: |
