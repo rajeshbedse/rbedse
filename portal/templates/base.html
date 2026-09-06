@@ -4,4 +4,5 @@
   {{ super() }}
   <script src="{{ url_for('static', filename='js/scan.js') }}?v={{ scan_js_version }}" defer></script>
   <script src="{{ url_for('static', filename='js/stock-detail-dashboard-v2.js') }}?v={{ scan_js_version }}" defer></script>
+  <script src="{{ url_for('static', filename='js/scan-layout-fixes.js') }}?v={{ scan_js_version }}" defer></script>
 {% endblock %}
