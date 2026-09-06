@@ -10,12 +10,21 @@
     });
   }
 
+  function applyMarketDirectionColors() {
+    document.querySelectorAll('.stock-modal .market-grid .market-cell:first-child .market-sub').forEach(function (el) {
+      var text = el.textContent.trim();
+      var negative = /^-/.test(text);
+      el.classList.toggle('market-negative', negative);
+      el.classList.toggle('market-positive', !negative && /^\+|^0(?:\.0+)?%/.test(text));
+    });
+  }
+
   function initTransactionNavigation() {
     if (!document.head) return;
     if (!document.getElementById('transaction-navigation-style')) {
       var style = document.createElement('style');
       style.id = 'transaction-navigation-style';
-      style.textContent = '.detail-tabs{display:none!important}.ov-link{display:none!important}.transaction-link{display:inline-block;margin-top:14px;color:#155eef;font-size:.72rem;font-weight:850;text-decoration:none}.transaction-link:after{content:" →";font-size:1rem}.transaction-link:hover{text-decoration:underline}.transaction-back-link{display:inline-block;margin-bottom:14px;color:#155eef;font-size:.72rem;font-weight:850;text-decoration:none}.transaction-back-link:before{content:"← ";font-size:1rem}.transaction-back-link:hover{text-decoration:underline}';
+      style.textContent = '.detail-tabs{display:none!important}.ov-link{display:none!important}.transaction-link{display:inline-block;margin-top:14px;color:#155eef;font-size:.72rem;font-weight:850;text-decoration:none}.transaction-link:after{content:" →";font-size:1rem}.transaction-link:hover{text-decoration:underline}.transaction-back-link{display:inline-block;margin-bottom:14px;color:#155eef;font-size:.72rem;font-weight:850;text-decoration:none}.transaction-back-link:before{content:"← ";font-size:1rem}.transaction-back-link:hover{text-decoration:underline}.market-grid .market-cell:first-child .market-sub.market-negative{color:#b91c1c!important}.market-grid .market-cell:first-child .market-sub.market-positive{color:#15803d!important}';
       document.head.appendChild(style);
     }
 
@@ -59,11 +68,14 @@
         heading.textContent = 'Promoter Activity';
       }
     });
+
+    applyMarketDirectionColors();
   }
 
   function applyAll() {
     applyAnalysisScroll();
     initTransactionNavigation();
+    applyMarketDirectionColors();
   }
 
   applyAll();
