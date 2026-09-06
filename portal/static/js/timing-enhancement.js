@@ -1,18 +1,18 @@
-/* RYB Finserv — promoter timing presentation layer
- * Descriptive only: this file never changes score, category, filtering or sorting.
- * DEV refinement: Overview is a compact decision dashboard; detailed metrics remain
- * in their specialist tabs. Optional 52-week price fields are presentation-only.
+/* RYB Finserv — stock detail presentation layer
+ * Descriptive only: never changes score, category, filtering or sorting.
+ * DEV UI: consolidate the Overview into a single decision-oriented flow.
  */
 (function () {
   'use strict';
   const root = document.querySelector('.scan-page');
   if (!root) return;
   const date = root.dataset.scanDate;
-  const esc = v => String(v ?? '').replace(/[&<>\'\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;',"\"":'&quot;'}[c]));
-  const money = v => v == null || v === '' || !Number.isFinite(Number(v)) ? '—' : '₹' + Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2});
-  const crMoney = v => v == null || v === '' || !Number.isFinite(Number(v)) ? '—' : '₹' + Number(v).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' Cr';
-  const num = v => v == null || v === '' || !Number.isFinite(Number(v)) ? '—' : Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2});
-  const pct = v => v == null || v === '' || !Number.isFinite(Number(v)) ? '—' : `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)}%`;
+  const esc = v => String(v ?? '').replace(/[&<>'\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));
+  const finite = v => v != null && v !== '' && Number.isFinite(Number(v));
+  const money = v => !finite(v) ? '—' : '₹' + Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2});
+  const crMoney = v => !finite(v) ? '—' : '₹' + Number(v).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' Cr';
+  const num = v => !finite(v) ? '—' : Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2});
+  const pct = v => !finite(v) ? '—' : `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)}%`;
   const fmtDate = s => {
     if (!s) return '—';
     const value = String(s).trim();
@@ -22,118 +22,118 @@
     return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
   };
   const stageClass = stage => ({
-    'Early Accumulation': 'timing-early',
-    'Confirmed Accumulation': 'timing-confirmed',
-    'Mature — Wait for Pullback': 'timing-mature',
-    'Late — Poor Entry': 'timing-late',
-    'No Signal': 'timing-none'
+    'Early Accumulation':'timing-early',
+    'Confirmed Accumulation':'timing-confirmed',
+    'Mature — Wait for Pullback':'timing-mature',
+    'Late — Poor Entry':'timing-late',
+    'No Signal':'timing-none'
   }[stage] || 'timing-none');
 
   const style = document.createElement('style');
   style.textContent = `
-    .overview-market{margin:0 0 14px;padding:18px 20px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}
-    .overview-market-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.overview-market-head strong{font-size:.78rem;letter-spacing:.05em;text-transform:uppercase;color:#475569}.overview-market-head span{font-size:.72rem;color:#64748b}
-    .overview-market-grid{display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr;align-items:center}.overview-market-item{min-width:0;padding:0 18px;border-left:1px solid #e2e8f0}.overview-market-item:first-child{padding-left:0;border-left:0}.overview-market-item:last-child{padding-right:0}.overview-market-item small{display:block;color:#64748b;font-size:.7rem;margin-bottom:5px}.overview-market-item b{font-size:1.12rem;color:#0f1f3d}.overview-market-up b{color:#15803d}
-    .range-value{display:flex;justify-content:space-between;gap:8px;font-size:.68rem;color:#64748b;margin-bottom:4px}.range-track{position:relative;height:7px;border-radius:999px;background:#e2e8f0}.range-fill{position:absolute;left:0;top:0;height:100%;border-radius:999px;background:#bfdbfe}.range-marker{position:absolute;top:50%;width:13px;height:13px;border:2px solid #fff;border-radius:50%;background:#1a56db;box-shadow:0 1px 3px rgba(15,31,61,.25);transform:translate(-50%,-50%)}.range-position{margin-top:5px;font-size:.68rem;color:#64748b}
-    .why-card{margin-bottom:14px}.why-card .detail-section{margin:0}
-    .timing-summary{margin:0 0 14px;padding:18px 20px;border:1px solid #dbe4ef;border-radius:14px;background:#f8fafc}.timing-summary-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}.timing-summary-head strong{font-size:1rem;color:#0f1f3d}.timing-summary-head span{font-size:.7rem;color:#64748b}.timing-subhead{display:block;margin:12px 0 8px;color:#64748b;font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase}.timing-activity-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:5px}.timing-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.timing-summary-grid div,.timing-activity-grid div{min-width:0}.timing-summary-grid small,.timing-activity-grid small{display:block;color:#64748b;font-size:.68rem;margin-bottom:3px}.timing-summary-grid b,.timing-activity-grid b{font-size:.84rem;color:#0f1f3d}.timing-confirmed{color:#166534!important}.timing-early{color:#15803d!important}.timing-mature{color:#a16207!important}.timing-late{color:#b91c1c!important}.timing-none{color:#64748b!important}
-    .timing-activity-grid{padding-bottom:14px;border-bottom:1px solid #e2e8f0}.timing-summary-grid .timing-highlight{font-size:.84rem}
-    .key-takeaways{margin:0 0 14px;padding:18px 20px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}.key-takeaways h3{margin:0 0 14px;font-size:1rem;color:#0f1f3d}.takeaway-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.takeaway{padding:0 18px;border-left:1px solid #e2e8f0}.takeaway:first-child{padding-left:0;border-left:0}.takeaway:last-child{padding-right:0}.takeaway small{display:block;color:#64748b;font-size:.68rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin-bottom:5px}.takeaway strong{display:block;color:#0f1f3d;font-size:.82rem;line-height:1.45;font-weight:600}
-    .detail-explore{margin:0 0 10px;padding:12px 16px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;color:#475569;font-size:.74rem}.detail-explore strong{display:block;color:#0f1f3d;font-size:.82rem;margin-bottom:2px}.detail-explore span{line-height:1.4}
+    #detail-price-grid{display:none!important}
+    .detail-decision-flow{display:flex;flex-direction:column;gap:12px;margin:0 0 14px}
+    .price-context,.timing-summary{border:1px solid #dbe4ef;border-radius:14px;background:#fff;overflow:hidden}
+    .flow-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid #e8eef5}
+    .flow-head strong{font-size:.78rem;letter-spacing:.04em;text-transform:uppercase;color:#334155}
+    .flow-head span{font-size:.65rem;color:#64748b}
+    .price-grid{display:grid;grid-template-columns:1fr 1.15fr 1fr;align-items:stretch}
+    .price-item{padding:13px 16px;min-width:0;border-left:1px solid #e8eef5}
+    .price-item:first-child{border-left:0}
+    .price-item small{display:block;color:#64748b;font-size:.64rem;margin-bottom:4px}
+    .price-item b{display:block;color:#0f1f3d;font-size:1rem;line-height:1.2}
+    .price-item em{display:block;font-style:normal;color:#64748b;font-size:.62rem;margin-top:3px}
+    .price-item--positive b{color:#15803d}
+    .price-item--positive{background:#f7fcf8}
+    .reference-bar{height:6px;margin-top:9px;border-radius:99px;background:#e2e8f0;position:relative}
+    .reference-bar span{position:absolute;top:50%;width:12px;height:12px;border:2px solid #fff;border-radius:50%;background:#1a56db;box-shadow:0 1px 3px rgba(15,31,61,.25);transform:translate(-50%,-50%)}
+    .timing-summary{background:#f8fafc}
+    .timing-summary .flow-head{background:#fff}
+    .timing-stage{display:flex;align-items:center;gap:8px;padding:12px 16px 9px}
+    .timing-stage-label{font-size:.62rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:800}
+    .timing-stage-value{font-size:.76rem;font-weight:800}
+    .timing-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;margin-right:5px;vertical-align:1px}
+    .timing-confirmed{color:#166534!important}.timing-early{color:#15803d!important}.timing-mature{color:#a16207!important}.timing-late{color:#b91c1c!important}.timing-none{color:#64748b!important}
+    .timing-section-title{padding:0 16px 7px;font-size:.62rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:800}
+    .activity-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0 16px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff}
+    .activity-item{padding:10px 11px;min-width:0}.activity-item+.activity-item{border-left:1px solid #e2e8f0}
+    .activity-item small,.timing-metric small{display:block;color:#64748b;font-size:.61rem;margin-bottom:3px}.activity-item b,.timing-metric b{font-size:.78rem;color:#0f1f3d}
+    .timing-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0 16px;padding:0 16px 15px}
+    .timing-metric{padding:8px 0;border-top:1px solid #e2e8f0;min-width:0}
+    .timing-metric--emphasis b{font-size:.86rem}
+    .detail-explore{display:none!important}
+    .key-takeaways{display:none!important}
+    .overview-market{display:none!important}
     .fundamental-metrics-section{margin-bottom:14px}
-    @media(max-width:700px){.overview-market-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.overview-market-item:nth-child(3){border-left:0;padding-left:0}.overview-market-item:nth-child(3),.overview-market-item:nth-child(4){padding-top:12px;border-top:1px solid #e2e8f0}.timing-summary-head{align-items:flex-start;flex-direction:column;gap:4px}.timing-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.takeaway-grid{grid-template-columns:1fr;gap:12px}.takeaway{padding:0;border-left:0}.takeaway + .takeaway{padding-top:12px;border-top:1px solid #e2e8f0}.detail-explore{display:none}}
-    @media(max-width:430px){.overview-market{padding:15px}.overview-market-item{padding:0 10px}.overview-market-item b{font-size:1rem}.timing-summary{padding:15px}.timing-activity-grid{gap:8px}.timing-summary-grid{gap:10px}.timing-summary-grid b,.timing-activity-grid b{font-size:.78rem}}
+    @media(max-width:700px){
+      .flow-head{padding:12px 13px}.flow-head span{font-size:.6rem}
+      .price-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.price-item{padding:12px 10px}.price-item b{font-size:.9rem}
+      .activity-grid{margin-left:12px;margin-right:12px}.timing-section-title{padding-left:12px;padding-right:12px}.timing-stage{padding-left:12px;padding-right:12px}.timing-metrics{padding-left:12px;padding-right:12px;grid-template-columns:repeat(2,minmax(0,1fr))}
+    }
+    @media(max-width:430px){.price-item small,.activity-item small,.timing-metric small{font-size:.58rem}.price-item b{font-size:.84rem}.activity-item b,.timing-metric b{font-size:.74rem}}
   `;
   document.head.appendChild(style);
 
   let timingRows = new Map();
   let currentDetailRow = null;
-
-  async function loadTimingRows() {
-    try {
-      const res = await fetch(`/api/scan/${date}/summary?view=${encodeURIComponent(document.querySelector('.scan-tab.is-active')?.dataset.view || 'shortlist')}`, {headers:{'Accept':'application/json'}});
-      if (!res.ok) return;
-      const data = await res.json();
-      timingRows = new Map((data.rows || []).map(r => [String(r.symbol || '').toUpperCase(), r]));
-      decorateCards();
-    } catch (_) {}
-  }
-
-  function decorateCards() {
-    document.querySelectorAll('#stock-cards .stock-card').forEach(card => {
-      if (card.querySelector('.timing-badge')) return;
-      const row = timingRows.get(String(card.dataset.symbol || '').toUpperCase());
-      if (!row || !row.timing_stage) return;
-      const footer = card.querySelector('.research-card-footer');
-      if (!footer) return;
-      const badge = document.createElement('span');
-      badge.className = `timing-badge ${stageClass(row.timing_stage)}`;
-      badge.innerHTML = `<span class="timing-dot" aria-hidden="true"></span>${esc(row.timing_stage)}`;
-      footer.insertBefore(badge, footer.firstChild);
-    });
-  }
+  let detailRequest = 0;
 
   function field(row, names) {
-    for (const name of names) {
-      const value = row?.[name];
-      if (value != null && value !== '' && Number.isFinite(Number(value))) return Number(value);
-    }
+    for (const name of names) if (finite(row?.[name])) return Number(row[name]);
     return null;
   }
 
-  function marketSnapshot(row) {
-    const high = field(row, ['week52_high','week_52_high','fifty_two_week_high','fiftyTwoWeekHigh','52_week_high','52WeekHigh']);
-    const low = field(row, ['week52_low','week_52_low','fifty_two_week_low','fiftyTwoWeekLow','52_week_low','52WeekLow']);
-    const cmp = Number(row.last_price);
-    let range = '';
-    if (high != null && low != null && high > low && Number.isFinite(cmp)) {
-      const pos = Math.max(0, Math.min(100, ((cmp - low) / (high - low)) * 100));
-      range = `<div class="overview-market-item"><small>52-week range</small><div class="range-value"><span>${money(low)}</span><span>${money(high)}</span></div><div class="range-track"><span class="range-fill" style="width:${pos.toFixed(1)}%"></span><span class="range-marker" style="left:${pos.toFixed(1)}%"></span></div><div class="range-position">CMP at ${pos.toFixed(0)}% of range</div></div>`;
-    } else {
-      range = `<div class="overview-market-item"><small>52-week range</small><b>—</b><div class="range-position">52W high / low not available in this snapshot</div></div>`;
-    }
-    return `<section class="overview-market" aria-label="Market snapshot"><div class="overview-market-head"><strong>Market snapshot</strong><span>Current price context</span></div><div class="overview-market-grid">
-      <div class="overview-market-item"><small>CMP</small><b>${money(row.last_price)}</b></div>
-      ${range}
-      <div class="overview-market-item"><small>Promoter reference</small><b>${money(row.avg_price)}</b></div>
-      <div class="overview-market-item overview-market-up"><small>Upside vs reference</small><b>${pct(row.price_diff_pct)}</b></div>
-    </div></section>`;
+  function removeGenerated() {
+    ['.detail-decision-flow','.overview-market','.timing-summary','.key-takeaways','.detail-explore'].forEach(sel => document.querySelectorAll(sel).forEach(el => el.remove()));
   }
 
   function timingPanel(row) {
-    if (!row || !row.signal_stage) return '';
-    const cls = stageClass(row.signal_stage);
-    return `<section id="timing-summary" class="timing-summary" aria-label="Promoter activity and timing">
-      <div class="timing-summary-head"><strong>Promoter activity &amp; timing</strong><span>Descriptive entry timing — does not change RYB Score</span></div>
-      <span class="timing-subhead">Current promoter activity</span>
-      <div class="timing-activity-grid">
-        <div><small>Promoter holding</small><b>${row.promo_holding == null ? '—' : num(row.promo_holding) + '%'}</b></div>
-        <div><small>Buying value</small><b>${crMoney(row.value_cr)}</b></div>
-        <div><small>Transactions</small><b>${row.num_buy_txn == null ? '—' : esc(row.num_buy_txn)}</b></div>
+    if (!row) return '';
+    const stage = row.signal_stage || row.accumulation_stage || 'No Signal';
+    const cls = stageClass(stage);
+    return `<section class="timing-summary" aria-label="Promoter activity and entry timing">
+      <div class="flow-head"><strong>Promoter activity &amp; timing</strong><span>Descriptive only · does not change RYB Score</span></div>
+      <div class="timing-stage"><span class="timing-stage-label">Entry signal</span><b class="timing-stage-value ${cls}"><span class="timing-dot"></span>${esc(stage)}</b><span class="timing-stage-label">${esc(row.freshness || 'No freshness signal')}</span></div>
+      <div class="timing-section-title">Current promoter activity</div>
+      <div class="activity-grid">
+        <div class="activity-item"><small>Holding</small><b>${finite(row.promo_holding) ? num(row.promo_holding)+'%' : '—'}</b></div>
+        <div class="activity-item"><small>Buying value</small><b>${crMoney(row.value_cr)}</b></div>
+        <div class="activity-item"><small>Transactions</small><b>${row.num_buy_txn == null ? '—' : esc(row.num_buy_txn)}</b></div>
       </div>
-      <span class="timing-subhead">Entry timing</span>
-      <div class="timing-summary-grid">
-        <div><small>Signal stage</small><b class="${cls}">${esc(row.signal_stage)}</b></div>
-        <div><small>Freshness</small><b>${esc(row.freshness || '—')}</b></div>
-        <div><small>CMP vs reference</small><b class="timing-highlight">${pct(row.cmp_vs_promoter_avg_pct)}</b></div>
-        <div><small>First buy</small><b>${esc(row.first_buy_date || '—')}</b></div>
-        <div><small>Latest buy</small><b>${esc(row.last_buy_date || '—')}</b></div>
-        <div><small>Accumulation</small><b>${row.accumulation_days == null ? '—' : esc(row.accumulation_days + ' days')}</b></div>
-        <div><small>Buys · 30D</small><b>${row.buy_txn_30d == null ? '—' : esc(row.buy_txn_30d)}</b></div>
+      <div class="timing-section-title">Entry timing</div>
+      <div class="timing-metrics">
+        <div class="timing-metric timing-metric--emphasis"><small>CMP vs avg buy</small><b class="${Number(row.cmp_vs_promoter_avg_pct) >= 0 ? 'timing-confirmed' : 'timing-late'}">${pct(row.cmp_vs_promoter_avg_pct)}</b></div>
+        <div class="timing-metric"><small>Avg buy price</small><b>${money(row.promoter_avg_price)}</b></div>
+        <div class="timing-metric"><small>First buy</small><b>${fmtDate(row.first_buy_date)}</b></div>
+        <div class="timing-metric"><small>Latest buy</small><b>${fmtDate(row.last_buy_date)}</b></div>
+        <div class="timing-metric"><small>Accumulation</small><b>${row.accumulation_days == null ? '—' : esc(row.accumulation_days+' days')}</b></div>
+        <div class="timing-metric"><small>Buys · 30D</small><b>${row.buy_txn_30d == null ? '—' : esc(row.buy_txn_30d)}</b></div>
       </div>
     </section>`;
   }
 
+  function priceContext(row) {
+    const cmp = Number(row.last_price);
+    const ref = Number(row.avg_price);
+    let marker = '';
+    if (Number.isFinite(cmp) && Number.isFinite(ref) && ref > 0) {
+      const ratio = Math.max(0, Math.min(100, (cmp / (ref * 1.25)) * 100));
+      marker = `<div class="reference-bar" aria-hidden="true"><span style="left:${ratio.toFixed(1)}%"></span></div>`;
+    }
+    return `<section class="price-context" aria-label="Price context"><div class="flow-head"><strong>Price context</strong><span>CMP relative to promoter reference</span></div><div class="price-grid">
+      <div class="price-item"><small>Current price</small><b>${money(row.last_price)}</b></div>
+      <div class="price-item"><small>Promoter reference</small><b>${money(row.avg_price)}</b>${marker}</div>
+      <div class="price-item price-item--positive"><small>vs reference</small><b>${pct(row.price_diff_pct)}</b><em>Current premium / discount</em></div>
+    </div></section>`;
+  }
+
+  function decisionFlow(row) {
+    return `<div class="detail-decision-flow">${priceContext(row)}${timingPanel(row)}</div>`;
+  }
+
   function fundamentalMetrics(row) {
     const metric = (label, value) => `<div class="detail-metric"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`;
-    return `<div class="detail-section fundamental-metrics-section"><h3>Key metrics</h3><div class="detail-metric-grid">
-      ${metric('Market cap', money(row.market_cap_cr) + (row.market_cap_cr != null ? ' Cr' : ''))}
-      ${metric('P/E', num(row.pe))}
-      ${metric('Revenue growth', row.rev_growth_pct == null ? '—' : pct(row.rev_growth_pct))}
-      ${metric('PAT growth', row.pat_growth_pct == null ? '—' : pct(row.pat_growth_pct))}
-      ${metric('ROCE', row.roce_pct == null ? '—' : pct(row.roce_pct))}
-      ${metric('Debt / Equity', num(row.de_ratio))}
-    </div></div>`;
+    return `<div class="detail-section fundamental-metrics-section"><h3>Key metrics</h3><div class="detail-metric-grid">${metric('Market cap', finite(row.market_cap_cr) ? money(row.market_cap_cr)+' Cr' : '—')}${metric('P/E', num(row.pe))}${metric('Revenue growth', finite(row.rev_growth_pct) ? pct(row.rev_growth_pct) : '—')}${metric('PAT growth', finite(row.pat_growth_pct) ? pct(row.pat_growth_pct) : '—')}${metric('ROCE', finite(row.roce_pct) ? pct(row.roce_pct) : '—')}${metric('Debt / Equity', num(row.de_ratio))}</div></div>`;
   }
 
   function removeOverviewFundamentals() {
@@ -141,27 +141,6 @@
       const heading = section.querySelector('h3');
       if (heading && heading.textContent.trim() === 'Key fundamentals') section.remove();
     });
-  }
-
-  function takeaways(row) {
-    const diff = row.cmp_vs_promoter_avg_pct ?? row.price_diff_pct;
-    const stage = row.signal_stage || row.accumulation_stage || 'No Signal';
-    const txns = row.num_buy_txn == null ? '—' : row.num_buy_txn;
-    const first = fmtDate(row.first_buy_date);
-    const latest = fmtDate(row.last_buy_date);
-    const high = field(row, ['week52_high','week_52_high','fifty_two_week_high','fiftyTwoWeekHigh','52_week_high','52WeekHigh']);
-    const low = field(row, ['week52_low','week_52_low','fifty_two_week_low','fiftyTwoWeekLow','52_week_low','52WeekLow']);
-    const cmp = Number(row.last_price);
-    let priceContext = 'Current price vs promoter reference';
-    if (high != null && low != null && high > low && Number.isFinite(cmp)) {
-      const pos = Math.max(0, Math.min(100, ((cmp-low)/(high-low))*100));
-      priceContext = `CMP is at ${pos.toFixed(0)}% of its 52-week range`;
-    }
-    return `<section class="key-takeaways" aria-label="Key takeaways"><h3>Key takeaways</h3><div class="takeaway-grid">
-      <div class="takeaway"><small>Valuation</small><strong>${diff == null ? 'Reference comparison unavailable' : `${pct(diff)} vs promoter reference`}</strong></div>
-      <div class="takeaway"><small>Promoter intent</small><strong>${esc(stage)}${txns !== '—' ? ` · ${esc(txns)} transaction${Number(txns)===1?'':'s'}` : ''}${first !== '—' && latest !== '—' ? ` · ${first} → ${latest}` : ''}</strong></div>
-      <div class="takeaway"><small>Price context</small><strong>${esc(priceContext)}</strong></div>
-    </div></section>`;
   }
 
   function syncDetailPanel() {
@@ -172,55 +151,66 @@
     if (active === 'fundamentals' && currentDetailRow && !panel.querySelector('.fundamental-metrics-section')) panel.insertAdjacentHTML('afterbegin', fundamentalMetrics(currentDetailRow));
   }
 
-  function decorateDetail(symbol) {
-    fetch(`/api/scan/${date}/stock/${encodeURIComponent(symbol)}`, {headers:{'Accept':'application/json'}})
-      .then(res => res.ok ? res.json() : null)
-      .then(row => {
-        if (!row) return;
-        currentDetailRow = row;
-        const content = document.querySelector('#detail-content');
-        const priceGrid = document.querySelector('#detail-price-grid');
-        const why = document.querySelector('#detail-why');
-        const tabs = document.querySelector('.detail-tabs');
-        if (!content || !priceGrid || !why || !tabs) return;
-
-        priceGrid.innerHTML = '';
-        priceGrid.insertAdjacentHTML('afterend', marketSnapshot(row));
-        document.querySelector('#timing-summary')?.remove();
-        document.querySelector('.key-takeaways')?.remove();
-        document.querySelector('.detail-explore')?.remove();
-        document.querySelector('.detail-price-grid')?.style.setProperty('display','none');
-        why.insertAdjacentHTML('afterend', timingPanel(row) + takeaways(row) + `<div class="detail-explore"><strong>Explore more details</strong><span>Fundamentals, technicals, risks and full promoter transaction history are available in the tabs below.</span></div>`);
-        syncDetailPanel();
-      })
-      .catch(() => {});
+  async function decorateDetail(symbol) {
+    const request = ++detailRequest;
+    try {
+      const res = await fetch(`/api/scan/${date}/stock/${encodeURIComponent(symbol)}`, {headers:{'Accept':'application/json'}});
+      if (!res.ok) return;
+      const row = await res.json();
+      if (request !== detailRequest || String(row.symbol || '').toUpperCase() !== String(symbol).toUpperCase()) return;
+      currentDetailRow = row;
+      const priceGrid = document.querySelector('#detail-price-grid');
+      const why = document.querySelector('#detail-why');
+      const panel = document.querySelector('#detail-panel');
+      if (!priceGrid || !why || !panel) return;
+      removeGenerated();
+      priceGrid.style.display = 'none';
+      why.insertAdjacentHTML('afterend', decisionFlow(row));
+      removeOverviewFundamentals();
+      syncDetailPanel();
+    } catch (_) {}
   }
 
-  const cardsObserver = new MutationObserver(decorateCards);
+  function decorateCards() {
+    document.querySelectorAll('#stock-cards .stock-card').forEach(card => {
+      if (card.querySelector('.timing-badge')) return;
+      const row = timingRows.get(String(card.dataset.symbol || '').toUpperCase());
+      if (!row?.timing_stage) return;
+      const footer = card.querySelector('.research-card-footer');
+      if (!footer) return;
+      const badge = document.createElement('span');
+      badge.className = `timing-badge ${stageClass(row.timing_stage)}`;
+      badge.innerHTML = `<span class="timing-dot" aria-hidden="true"></span>${esc(row.timing_stage)}`;
+      footer.insertBefore(badge, footer.firstChild);
+    });
+  }
+
+  async function loadTimingRows() {
+    try {
+      const view = document.querySelector('.scan-tab.is-active')?.dataset.view || 'shortlist';
+      const res = await fetch(`/api/scan/${date}/summary?view=${encodeURIComponent(view)}`, {headers:{'Accept':'application/json'}});
+      if (!res.ok) return;
+      const data = await res.json();
+      timingRows = new Map((data.rows || []).map(r => [String(r.symbol || '').toUpperCase(), r]));
+      decorateCards();
+    } catch (_) {}
+  }
+
   const cards = document.querySelector('#stock-cards');
-  if (cards) cardsObserver.observe(cards, {childList:true});
+  if (cards) new MutationObserver(decorateCards).observe(cards, {childList:true});
 
   const detailPanel = document.querySelector('#detail-panel');
-  if (detailPanel) {
-    const observer = new MutationObserver(syncDetailPanel);
-    observer.observe(detailPanel, {childList:true,subtree:true});
-  }
+  if (detailPanel) new MutationObserver(syncDetailPanel).observe(detailPanel, {childList:true,subtree:true});
 
   const title = document.querySelector('#detail-title');
-  if (title) {
-    const observer = new MutationObserver(() => {
-      const symbol = title.textContent.trim();
-      currentDetailRow = null;
-      document.querySelector('#detail-panel')?.querySelector('.fundamental-metrics-section')?.remove();
-      document.querySelector('.overview-market')?.remove();
-      document.querySelector('#timing-summary')?.remove();
-      document.querySelector('.key-takeaways')?.remove();
-      document.querySelector('.detail-explore')?.remove();
-      document.querySelector('.detail-price-grid')?.style.removeProperty('display');
-      if (symbol) decorateDetail(symbol);
-    });
-    observer.observe(title, {childList:true, characterData:true, subtree:true});
-  }
+  if (title) new MutationObserver(() => {
+    const symbol = title.textContent.trim();
+    currentDetailRow = null;
+    detailRequest += 1;
+    removeGenerated();
+    document.querySelector('#detail-price-grid')?.style.removeProperty('display');
+    if (symbol) decorateDetail(symbol);
+  }).observe(title, {childList:true,characterData:true,subtree:true});
 
   document.querySelectorAll('.scan-tab').forEach(tab => tab.addEventListener('click', () => setTimeout(loadTimingRows, 0)));
   loadTimingRows();
