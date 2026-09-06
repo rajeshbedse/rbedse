@@ -20,10 +20,17 @@
       position: relative;
       z-index: 1;
     }
-    .stock-cards .stock-card,
-    .stock-cards .stock-card-main,
-    .stock-cards .research-card,
-    .stock-cards .research-card-main {
+
+    /* Shortlist status colors are translucent, so the watermark remains visible through them. */
+    .stock-cards .stock-card.is-shortlisted .stock-card-main,
+    .stock-cards .stock-card.is-shortlisted .research-card-main {
+      background: rgba(244, 251, 246, .72) !important;
+    }
+    .stock-cards .stock-card:not(.is-shortlisted) .stock-card-main,
+    .stock-cards .stock-card:not(.is-shortlisted) .research-card-main {
+      background: rgba(254, 244, 244, .72) !important;
+    }
+    .stock-cards .stock-card {
       background: transparent !important;
     }
 
@@ -70,8 +77,6 @@
         '.stock-modal .stock-detail>.stock-detail-header{background:rgba(255,255,255,.86)!important}',
         '.stock-modal .stock-detail> :not(.detail-watermark){position:relative;z-index:1}',
         '.stock-modal .stock-detail .detail-tabs{background:rgba(255,255,255,.86)!important}',
-        /* Analysis cards are transparent so the fixed watermark remains visible through the
-           entire analysis page, including while the user scrolls. */
         '.stock-modal .stock-detail .detail-score-block{background:transparent!important;background-image:none!important}',
         '.stock-modal .stock-detail .dd-card{background:transparent!important;background-image:none!important}',
         '.stock-modal .stock-detail .dd-card.promoter{background:transparent!important;background-image:none!important}',
