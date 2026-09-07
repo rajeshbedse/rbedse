@@ -13,12 +13,23 @@
       opacity: .06 !important;
       overflow: visible !important;
     }
-    body > .skip-link,
-    body > .site-header,
-    body > main,
+
+    /* Keep the global header as the top stacking layer while page content scrolls underneath it. */
+    body > .skip-link { position: absolute; z-index: 9999; }
+    body > .site-header {
+      position: sticky !important;
+      top: 0 !important;
+      z-index: 1000 !important;
+      isolation: isolate !important;
+    }
+    body > main {
+      position: relative !important;
+      z-index: 0 !important;
+      isolation: isolate;
+    }
     body > .site-footer {
       position: relative;
-      z-index: 1;
+      z-index: 0;
     }
 
     /* Shortlist status colors are translucent, so the watermark remains visible through them. */
@@ -30,16 +41,11 @@
     .stock-cards .stock-card:not(.is-shortlisted) .research-card-main {
       background: rgba(254, 244, 244, .72) !important;
     }
-    .stock-cards .stock-card {
-      background: transparent !important;
-    }
+    .stock-cards .stock-card { background: transparent !important; }
 
     .stock-modal { z-index: 1000; background: transparent !important; }
     .stock-modal-backdrop { background: #f7f9fc !important; }
-    .stock-detail {
-      background: transparent !important;
-      position: relative !important;
-    }
+    .stock-detail { background: transparent !important; position: relative !important; }
     .stock-detail > .detail-watermark {
       display: block !important;
       position: fixed !important;
@@ -58,10 +64,7 @@
       opacity: .06 !important;
       overflow: visible !important;
     }
-    .stock-detail > :not(.detail-watermark) {
-      position: relative;
-      z-index: 1;
-    }
+    .stock-detail > :not(.detail-watermark) { position: relative; z-index: 1; }
 
     /* Mobile View Analysis typography: bring analysis content back in line with the scan result scale. */
     @media (max-width: 640px) {
@@ -98,7 +101,6 @@
   <script>
     (function () {
       'use strict';
-
       var overrideCss = [
         '.stock-modal{background:transparent!important}',
         '.stock-modal-backdrop{background:#f7f9fc!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
@@ -153,5 +155,5 @@
 
   <script src="{{ url_for('static', filename='js/scan.js') }}?v={{ scan_js_version }}" defer></script>
   <script src="{{ url_for('static', filename='js/stock-detail-dashboard-v2.js') }}?v={{ scan_js_version }}" defer></script>
-  <script src="{{ url_for('static', filename='js/scan-layout-fixes.js') }}?v={{ scan_js_version }}" defer></script>
+  <script src="{{ url_for('static', filename='js/scan-layout-fixes.js') }}?v={{ scan_js_version }}-headerfix1" defer></script>
 {% endblock %}
