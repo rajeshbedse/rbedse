@@ -4,35 +4,11 @@
   {{ super() }}
   <style id="global-watermark-layer">
     html, body { margin: 0 !important; padding: 0 !important; }
-    body > svg {
-      position: fixed !important;
-      inset: 0 !important;
-      width: 100vw !important;
-      height: 100vh !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      pointer-events: none !important;
-      z-index: 0 !important;
-      opacity: .06 !important;
-      overflow: visible !important;
-    }
+    body > svg { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; margin: 0 !important; padding: 0 !important; pointer-events: none !important; z-index: 0 !important; opacity: .06 !important; overflow: visible !important; }
     body:has(.scan-page) > svg { display: none !important; }
-
-    /* Header must remain the top stacking layer while scan content scrolls behind it. */
     body > .skip-link { position: absolute !important; z-index: 9999 !important; }
-    body > .site-header {
-      position: sticky !important;
-      top: 0 !important;
-      z-index: 1000 !important;
-      isolation: isolate !important;
-    }
-    body > main {
-      position: relative !important;
-      z-index: 0 !important;
-      margin-top: 0 !important;
-      padding-top: 0 !important;
-      isolation: isolate;
-    }
+    body > .site-header { position: sticky !important; top: 0 !important; z-index: 1000 !important; isolation: isolate !important; }
+    body > main { position: relative !important; z-index: 0 !important; margin-top: 0 !important; padding-top: 0 !important; isolation: isolate; }
     body > .site-footer { position: relative; z-index: 0; }
     .site-header, #main-content, .scan-page { margin-top: 0 !important; }
 
@@ -68,6 +44,12 @@
     .stock-modal .stock-detail .ov-row span { color: #64748b !important; text-transform: uppercase !important; letter-spacing: .045em !important; }
     .stock-modal .stock-detail .ov-row b { font-size: .8rem !important; color: #172554 !important; text-transform: none !important; letter-spacing: normal !important; }
     .stock-modal .stock-detail .ov-row b.good { color: #15803d !important; }
+    .stock-modal .stock-detail .ov-row b.signed-positive { color: #15803d !important; }
+    .stock-modal .stock-detail .ov-row b.signed-negative { color: #b91c1c !important; }
+    .stock-modal .stock-detail .market-sub.signed-positive { color: #15803d !important; }
+    .stock-modal .stock-detail .market-sub.signed-negative { color: #b91c1c !important; }
+    .stock-modal .stock-detail .timing b.signed-positive { color: #15803d !important; }
+    .stock-modal .stock-detail .timing b.signed-negative { color: #b91c1c !important; }
     .stock-modal .stock-detail .badge { font-size: .68rem !important; padding: 5px 9px !important; }
     .stock-modal .stock-detail .data-note { font-size: .72rem !important; margin-top: 18px !important; }
 
@@ -81,7 +63,6 @@
     .stock-modal .stock-detail .activity b,
     .stock-modal .stock-detail .timing b,
     .stock-modal .stock-detail .range-values b { text-transform: none !important; letter-spacing: normal !important; }
-
     .signed-positive { color: #15803d !important; }
     .signed-negative { color: #b91c1c !important; }
     .stock-modal .stock-detail,
@@ -131,5 +112,5 @@
   </style>
   <script src="{{ url_for('static', filename='js/scan.js') }}?v={{ scan_js_version }}" defer></script>
   <script src="{{ url_for('static', filename='js/stock-detail-dashboard-v2.js') }}?v={{ scan_js_version }}" defer></script>
-  <script src="{{ url_for('static', filename='js/scan-layout-fixes.js') }}?v={{ scan_js_version }}-headerfix2" defer></script>
+  <script src="{{ url_for('static', filename='js/scan-layout-fixes.js') }}?v={{ scan_js_version }}-headerfix3" defer></script>
 {% endblock %}
