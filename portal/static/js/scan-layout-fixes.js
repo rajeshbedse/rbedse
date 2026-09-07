@@ -82,37 +82,6 @@
     });
   }
 
-  function applyPromoterReferenceConsistency() {
-    document.querySelectorAll('.stock-modal .stock-detail').forEach(function (detail) {
-      var currentCell = Array.prototype.find.call(detail.querySelectorAll('.market-cell'), function (cell) {
-        var label = cell.querySelector('label');
-        return label && label.textContent.trim().toUpperCase() === 'CURRENT PRICE (CMP)';
-      });
-      if (!currentCell) return;
-      var cmpEl = currentCell.querySelector('.market-big');
-      var subEl = currentCell.querySelector('.market-sub');
-      if (!cmpEl || !subEl) return;
-
-      var avgEl = Array.prototype.find.call(detail.querySelectorAll('.timing'), function (cell) {
-        var label = cell.querySelector('label');
-        return label && label.textContent.trim().toUpperCase() === 'AVG BUY PRICE';
-      });
-      var avgValue = avgEl && avgEl.querySelector('b');
-      if (!avgValue) return;
-
-      var cmp = parseFloat((cmpEl.textContent || '').replace(/[^0-9.]/g, ''));
-      var avg = parseFloat((avgValue.textContent || '').replace(/[^0-9.]/g, ''));
-      if (!Number.isFinite(cmp) || !Number.isFinite(avg) || avg === 0) return;
-
-      var diff = ((cmp - avg) / avg) * 100;
-      var text = (diff > 0 ? '+' : '') + diff.toFixed(1) + '% vs promoter avg';
-      subEl.textContent = text;
-      var cls = signedClass(text);
-      subEl.classList.remove('signed-positive', 'signed-negative');
-      if (cls) subEl.classList.add(cls);
-    });
-  }
-
   function initTransactionNavigation() {
     if (!document.head) return;
     if (!document.getElementById('transaction-navigation-style')) {
@@ -166,7 +135,6 @@
     applyAnalysisScroll();
     initTransactionNavigation();
     applySignedNumberColors();
-    applyPromoterReferenceConsistency();
   }
 
   applyAll();
