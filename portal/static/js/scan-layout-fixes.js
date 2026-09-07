@@ -2,6 +2,28 @@
 (function () {
   'use strict';
 
+  function installDetailPresentationStyle() {
+    if (!document.head || document.getElementById('detail-presentation-style')) return;
+    var style = document.createElement('style');
+    style.id = 'detail-presentation-style';
+    style.textContent = [
+      'body>svg{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;margin:0!important;padding:0!important;pointer-events:none!important;z-index:0!important;opacity:.06!important;overflow:visible!important}',
+      'body>.skip-link,body>.site-header,body>main,body>.site-footer{position:relative;z-index:1}',
+      '.stock-modal .stock-detail{background:transparent!important}',
+      '.stock-modal .stock-detail>.detail-watermark{z-index:0!important;pointer-events:none!important}',
+      '.stock-modal .stock-detail>.detail-watermark svg{z-index:0!important;pointer-events:none!important}',
+      '.stock-modal .stock-detail>.stock-detail-header,.stock-modal .stock-detail>.detail-hero,.stock-modal .stock-detail>.detail-decision-flow,.stock-modal .stock-detail>.detail-tabs,.stock-modal .stock-detail>.detail-panel{position:relative;z-index:1}',
+      '.stock-modal .stock-detail .dd-card,.stock-modal .stock-detail .overview-card,.stock-modal .stock-detail .activity-grid{background:rgba(255,255,255,.72)!important}',
+      '.stock-modal .stock-detail .dd-card.promoter{background:rgba(246,255,250,.72)!important}',
+      '.stock-modal .stock-detail .market-cell label,.stock-modal .stock-detail .activity label,.stock-modal .stock-detail .timing label,.stock-modal .stock-detail .transaction-grid small{display:block!important;text-transform:uppercase!important;letter-spacing:.045em!important}',
+      '.stock-modal .stock-detail .market-cell .market-big,.stock-modal .stock-detail .market-cell .market-sub,.stock-modal .stock-detail .activity b,.stock-modal .stock-detail .timing b,.stock-modal .stock-detail .transaction-grid strong{ text-transform:none!important;letter-spacing:normal!important}',
+      '.stock-modal .stock-detail .transaction-card>div:first-child span{ text-transform:none!important}',
+      '.stock-modal .stock-detail .dd-head strong,.stock-modal .stock-detail .dd-section,.stock-modal .stock-detail .ov-head strong{ text-transform:none!important}',
+      '.stock-modal .stock-detail .dd-section{letter-spacing:.04em!important}'
+    ].join('');
+    document.head.appendChild(style);
+  }
+
   function applyAnalysisScroll() {
     document.querySelectorAll('.stock-detail').forEach(function (el) {
       if (getComputedStyle(el).overflowY !== 'auto') el.style.setProperty('overflow-y', 'auto', 'important');
@@ -73,6 +95,7 @@
   }
 
   function applyAll() {
+    installDetailPresentationStyle();
     applyAnalysisScroll();
     initTransactionNavigation();
     applyMarketDirectionColors();
