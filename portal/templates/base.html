@@ -3,7 +3,8 @@
 {% block head_extra %}
   {{ super() }}
   <style id="global-watermark-layer">
-    body > svg[aria-hidden="true"] {
+    /* Keep the decorative watermark out of normal document flow. */
+    body > svg {
       position: fixed !important;
       inset: 0 !important;
       width: 100vw !important;
@@ -61,6 +62,32 @@
     .stock-detail > :not(.detail-watermark) {
       position: relative;
       z-index: 1;
+    }
+
+    /* Match detail-page labels to the scan-result convention: uppercase titles, normal-case values. */
+    .stock-modal .stock-detail .market-cell label,
+    .stock-modal .stock-detail .activity label,
+    .stock-modal .stock-detail .timing label,
+    .stock-modal .stock-detail .dd-section,
+    .stock-modal .stock-detail .range-values small {
+      text-transform: uppercase !important;
+      letter-spacing: .035em !important;
+    }
+    .stock-modal .stock-detail .market-big,
+    .stock-modal .stock-detail .activity b,
+    .stock-modal .stock-detail .timing b,
+    .stock-modal .stock-detail .range-values b {
+      text-transform: none !important;
+    }
+
+    /* Keep detail-page action/link typography on the same Inter scale as the scan page. */
+    .stock-modal .stock-detail .transaction-link,
+    .stock-modal .stock-detail .transaction-back-link,
+    .stock-modal .stock-detail .view-link {
+      font-family: var(--font-sans) !important;
+      font-size: var(--text-sm) !important;
+      line-height: 1.4 !important;
+      font-weight: 700 !important;
     }
 
     /* Mobile View Analysis typography: bring analysis content back in line with the scan result scale. */
