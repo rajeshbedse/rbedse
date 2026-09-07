@@ -4,10 +4,6 @@
   {{ super() }}
   <style id="global-watermark-layer">
     html, body { margin: 0 !important; padding: 0 !important; }
-
-    /* The global watermark is decorative only. On the scan/detail page the detail view
-       has its own watermark; removing the body-level SVG entirely also guarantees that
-       it can never create a flex-item/flow gap above the DEV header. */
     body > svg {
       position: fixed !important;
       inset: 0 !important;
@@ -21,34 +17,21 @@
       overflow: visible !important;
     }
     body:has(.scan-page) > svg { display: none !important; }
-
     body > .skip-link,
     body > .site-header,
     body > main,
-    body > .site-footer {
-      position: relative;
-      z-index: 1;
-    }
+    body > .site-footer { position: relative; z-index: 1; }
     body > .site-header { margin-top: 0 !important; top: 0 !important; }
     body > main { margin-top: 0 !important; padding-top: 0 !important; }
     .site-header, #main-content, .scan-page { margin-top: 0 !important; }
 
-    /* Preserve the translucent shortlist treatment. */
     .stock-cards .stock-card.is-shortlisted .stock-card-main,
-    .stock-cards .stock-card.is-shortlisted .research-card-main {
-      background: rgba(244, 251, 246, .72) !important;
-    }
+    .stock-cards .stock-card.is-shortlisted .research-card-main { background: rgba(244, 251, 246, .72) !important; }
     .stock-cards .stock-card:not(.is-shortlisted) .stock-card-main,
-    .stock-cards .stock-card:not(.is-shortlisted) .research-card-main {
-      background: rgba(254, 244, 244, .72) !important;
-    }
+    .stock-cards .stock-card:not(.is-shortlisted) .research-card-main { background: rgba(254, 244, 244, .72) !important; }
     .stock-cards .stock-card { background: transparent !important; }
 
-    /* Scan-page header. */
-    .scan-page .page-header {
-      margin-top: 0 !important;
-      padding: 1.55rem 0 1.45rem !important;
-    }
+    .scan-page .page-header { margin-top: 0 !important; padding: 1.55rem 0 1.45rem !important; }
     .scan-page .breadcrumb { margin-bottom: .85rem !important; }
     .scan-page .page-title { font-size: clamp(2rem, 3.2vw, 2.6rem) !important; line-height: 1.04 !important; }
     .scan-page .page-title-weekday { font-size: var(--text-xs) !important; margin-bottom: .22rem !important; }
@@ -58,72 +41,21 @@
     .scan-page .stat-num { font-size: 2.35rem !important; }
     .scan-page .stat-lbl { font-size: var(--text-xxs) !important; }
 
-    /* Detail page surfaces and watermark. */
     .stock-modal { z-index: 1000; background: transparent !important; }
     .stock-modal-backdrop { background: #f7f9fc !important; }
-    .stock-detail {
-      background: #fff !important;
-      position: relative !important;
-      isolation: isolate !important;
-    }
-    .stock-detail > .detail-watermark {
-      display: block !important;
-      position: absolute !important;
-      inset: 0 !important;
-      width: 100% !important;
-      height: 100% !important;
-      margin: 0 !important;
-      pointer-events: none !important;
-      z-index: 0 !important;
-      overflow: hidden !important;
-    }
-    .stock-detail > .detail-watermark > svg {
-      position: absolute !important;
-      top: 50% !important;
-      left: 50% !important;
-      width: 72% !important;
-      height: 72% !important;
-      transform: translate(-50%, -42%) !important;
-      margin: 0 !important;
-      pointer-events: none !important;
-      opacity: .045 !important;
-      z-index: 0 !important;
-    }
+    .stock-detail { background: #fff !important; position: relative !important; isolation: isolate !important; }
+    .stock-detail > .detail-watermark { display: block !important; position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; margin: 0 !important; pointer-events: none !important; z-index: 0 !important; overflow: hidden !important; }
+    .stock-detail > .detail-watermark > svg { position: absolute !important; top: 50% !important; left: 50% !important; width: 72% !important; height: 72% !important; transform: translate(-50%, -42%) !important; margin: 0 !important; pointer-events: none !important; opacity: .045 !important; z-index: 0 !important; }
     .stock-detail > :not(.detail-watermark) { position: relative; z-index: 1; }
 
-    .stock-modal .stock-detail .overview-grid {
-      display: grid !important;
-      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-      gap: 16px !important;
-    }
-    .stock-modal .stock-detail .overview-card {
-      border: 1px solid #d9e2ef !important;
-      border-radius: 14px !important;
-      background: #fff !important;
-      padding: 16px !important;
-      box-shadow: none !important;
-    }
+    .stock-modal .stock-detail .overview-grid { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 16px !important; }
+    .stock-modal .stock-detail .overview-card { border: 1px solid #d9e2ef !important; border-radius: 14px !important; background: #fff !important; padding: 16px !important; box-shadow: none !important; }
     .stock-modal .stock-detail .ov-head { margin-bottom: 12px !important; }
-    .stock-modal .stock-detail .ov-head strong {
-      font-size: 1rem !important;
-      font-weight: 800 !important;
-      color: #102052 !important;
-      text-transform: uppercase !important;
-      letter-spacing: .02em !important;
-    }
+    .stock-modal .stock-detail .ov-head strong { font-size: 1rem !important; font-weight: 800 !important; color: #102052 !important; text-transform: uppercase !important; letter-spacing: .02em !important; }
     .stock-modal .stock-detail .ov-head small { font-size: .78rem !important; color: #64748b !important; text-transform: none !important; letter-spacing: normal !important; }
     .stock-modal .stock-detail .ov-row { font-size: .78rem !important; padding: 8px 0 !important; }
-    .stock-modal .stock-detail .ov-row span {
-      color: #64748b !important;
-      text-transform: uppercase !important;
-      letter-spacing: .045em !important;
-    }
-    .stock-modal .stock-detail .ov-row b {
-      font-size: .8rem !important;
-      color: #172554 !important;
-      text-transform: none !important;
-      letter-spacing: normal !important;
-    }
+    .stock-modal .stock-detail .ov-row span { color: #64748b !important; text-transform: uppercase !important; letter-spacing: .045em !important; }
+    .stock-modal .stock-detail .ov-row b { font-size: .8rem !important; color: #172554 !important; text-transform: none !important; letter-spacing: normal !important; }
     .stock-modal .stock-detail .ov-row b.good { color: #15803d !important; }
     .stock-modal .stock-detail .badge { font-size: .68rem !important; padding: 5px 9px !important; }
     .stock-modal .stock-detail .data-note { font-size: .72rem !important; margin-top: 18px !important; }
@@ -132,38 +64,23 @@
     .stock-modal .stock-detail .activity label,
     .stock-modal .stock-detail .timing label,
     .stock-modal .stock-detail .dd-section,
-    .stock-modal .stock-detail .range-values small {
-      display: block !important;
-      text-transform: uppercase !important;
-      letter-spacing: .045em !important;
-    }
+    .stock-modal .stock-detail .range-values small { display: block !important; text-transform: uppercase !important; letter-spacing: .045em !important; }
     .stock-modal .stock-detail .market-big,
     .stock-modal .stock-detail .market-sub,
     .stock-modal .stock-detail .activity b,
     .stock-modal .stock-detail .timing b,
-    .stock-modal .stock-detail .range-values b {
-      text-transform: none !important;
-      letter-spacing: normal !important;
-    }
+    .stock-modal .stock-detail .range-values b { text-transform: none !important; letter-spacing: normal !important; }
 
+    .signed-positive { color: #15803d !important; }
+    .signed-negative { color: #b91c1c !important; }
     .stock-modal .stock-detail,
     .stock-modal .stock-detail button,
     .stock-modal .stock-detail a { font-family: var(--font-sans) !important; }
     .stock-modal .stock-detail .transaction-link,
     .stock-modal .stock-detail .transaction-back-link,
-    .stock-modal .stock-detail .view-link {
-      font-size: var(--text-sm) !important;
-      line-height: 1.4 !important;
-      font-weight: 700 !important;
-    }
+    .stock-modal .stock-detail .view-link { font-size: var(--text-sm) !important; line-height: 1.4 !important; font-weight: 700 !important; }
 
-    /* Explicit signed-number semantics: '+' = green, '-' = red. */
-    .signed-positive { color: #15803d !important; }
-    .signed-negative { color: #b91c1c !important; }
-
-    @media (max-width: 900px) {
-      .stock-modal .stock-detail .overview-grid { grid-template-columns: 1fr !important; }
-    }
+    @media (max-width: 900px) { .stock-modal .stock-detail .overview-grid { grid-template-columns: 1fr !important; } }
     @media (max-width: 640px) {
       .scan-page .page-header { padding: 1.35rem 0 1.15rem !important; }
       .scan-page .breadcrumb { margin-bottom: .7rem !important; }
@@ -201,8 +118,7 @@
       .stock-modal .stock-detail .transaction-back-link { font-size: .78rem !important; }
     }
   </style>
-
   <script src="{{ url_for('static', filename='js/scan.js') }}?v={{ scan_js_version }}" defer></script>
   <script src="{{ url_for('static', filename='js/stock-detail-dashboard-v2.js') }}?v={{ scan_js_version }}" defer></script>
-  <script src="{{ url_for('static', filename='js/scan-layout-fixes.js') }}?v={{ scan_js_version }}" defer></script>
+  <script src="{{ url_for('static', filename='js/scan-layout-fixes.js') }}?v={{ scan_js_version }}-prototype3" defer></script>
 {% endblock %}
