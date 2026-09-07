@@ -52,7 +52,10 @@ jobs:
         run: python -m unittest tests.test_timing_integration
 
       - name: Validate scan JavaScript syntax
-        run: node --check portal/static/js/scan.js
+        run: |
+          node --check portal/static/js/scan.js
+          node --check portal/static/js/stock-detail-dashboard-v2.js
+          node --check portal/static/js/scan-layout-fixes.js
 
       - name: Probe DEV scan summary API
         run: |
