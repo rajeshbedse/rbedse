@@ -3,19 +3,25 @@
 {% block head_extra %}
   {{ super() }}
   <style id="global-watermark-layer">
-    /* Keep the decorative watermark out of normal document flow. */
     html, body { margin: 0 !important; padding: 0 !important; }
+
+    /* The global watermark is decorative only. On the scan/detail page the detail view
+       has its own watermark; removing the body-level SVG entirely also guarantees that
+       it can never create a flex-item/flow gap above the DEV header. */
     body > svg {
       position: fixed !important;
       inset: 0 !important;
       width: 100vw !important;
       height: 100vh !important;
       margin: 0 !important;
+      padding: 0 !important;
       pointer-events: none !important;
       z-index: 0 !important;
       opacity: .06 !important;
       overflow: visible !important;
     }
+    body:has(.scan-page) > svg { display: none !important; }
+
     body > .skip-link,
     body > .site-header,
     body > main,
@@ -23,9 +29,11 @@
       position: relative;
       z-index: 1;
     }
+    body > .site-header { margin-top: 0 !important; top: 0 !important; }
+    body > main { margin-top: 0 !important; padding-top: 0 !important; }
     .site-header, #main-content, .scan-page { margin-top: 0 !important; }
 
-    /* Shortlist status colors are translucent, so the watermark remains visible through them. */
+    /* Preserve the translucent shortlist treatment. */
     .stock-cards .stock-card.is-shortlisted .stock-card-main,
     .stock-cards .stock-card.is-shortlisted .research-card-main {
       background: rgba(244, 251, 246, .72) !important;
@@ -36,7 +44,7 @@
     }
     .stock-cards .stock-card { background: transparent !important; }
 
-    /* Scan-page header: compact and directly attached to the DEV header. */
+    /* Scan-page header. */
     .scan-page .page-header {
       margin-top: 0 !important;
       padding: 1.55rem 0 1.45rem !important;
@@ -50,7 +58,7 @@
     .scan-page .stat-num { font-size: 2.35rem !important; }
     .scan-page .stat-lbl { font-size: var(--text-xxs) !important; }
 
-    /* Stock detail presentation. Keep cards opaque, aligned and readable. */
+    /* Detail page surfaces and watermark. */
     .stock-modal { z-index: 1000; background: transparent !important; }
     .stock-modal-backdrop { background: #f7f9fc !important; }
     .stock-detail {
@@ -81,10 +89,7 @@
       opacity: .045 !important;
       z-index: 0 !important;
     }
-    .stock-detail > :not(.detail-watermark) {
-      position: relative;
-      z-index: 1;
-    }
+    .stock-detail > :not(.detail-watermark) { position: relative; z-index: 1; }
 
     .stock-modal .stock-detail .overview-grid {
       display: grid !important;
@@ -99,16 +104,30 @@
       box-shadow: none !important;
     }
     .stock-modal .stock-detail .ov-head { margin-bottom: 12px !important; }
-    .stock-modal .stock-detail .ov-head strong { font-size: 1rem !important; font-weight: 800 !important; color: #102052 !important; }
-    .stock-modal .stock-detail .ov-head small { font-size: .78rem !important; color: #64748b !important; }
+    .stock-modal .stock-detail .ov-head strong {
+      font-size: 1rem !important;
+      font-weight: 800 !important;
+      color: #102052 !important;
+      text-transform: uppercase !important;
+      letter-spacing: .02em !important;
+    }
+    .stock-modal .stock-detail .ov-head small { font-size: .78rem !important; color: #64748b !important; text-transform: none !important; letter-spacing: normal !important; }
     .stock-modal .stock-detail .ov-row { font-size: .78rem !important; padding: 8px 0 !important; }
-    .stock-modal .stock-detail .ov-row span { color: #64748b !important; text-transform: none !important; letter-spacing: normal !important; }
-    .stock-modal .stock-detail .ov-row b { font-size: .8rem !important; color: #172554 !important; text-transform: none !important; letter-spacing: normal !important; }
+    .stock-modal .stock-detail .ov-row span {
+      color: #64748b !important;
+      text-transform: uppercase !important;
+      letter-spacing: .045em !important;
+    }
+    .stock-modal .stock-detail .ov-row b {
+      font-size: .8rem !important;
+      color: #172554 !important;
+      text-transform: none !important;
+      letter-spacing: normal !important;
+    }
     .stock-modal .stock-detail .ov-row b.good { color: #15803d !important; }
     .stock-modal .stock-detail .badge { font-size: .68rem !important; padding: 5px 9px !important; }
     .stock-modal .stock-detail .data-note { font-size: .72rem !important; margin-top: 18px !important; }
 
-    /* Field labels use the scan-result convention: uppercase titles, normal-case values. */
     .stock-modal .stock-detail .market-cell label,
     .stock-modal .stock-detail .activity label,
     .stock-modal .stock-detail .timing label,
@@ -137,6 +156,10 @@
       line-height: 1.4 !important;
       font-weight: 700 !important;
     }
+
+    /* Explicit signed-number semantics: '+' = green, '-' = red. */
+    .signed-positive { color: #15803d !important; }
+    .signed-negative { color: #b91c1c !important; }
 
     @media (max-width: 900px) {
       .stock-modal .stock-detail .overview-grid { grid-template-columns: 1fr !important; }
@@ -178,60 +201,6 @@
       .stock-modal .stock-detail .transaction-back-link { font-size: .78rem !important; }
     }
   </style>
-
-  <script>
-    (function () {
-      'use strict';
-
-      /* Only keep structural modal overrides here. Do not fight the presentation CSS above. */
-      var overrideCss = [
-        '.stock-modal{background:transparent!important}',
-        '.stock-modal-backdrop{background:#f7f9fc!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
-        '.stock-modal .stock-detail{background:#fff!important;isolation:isolate!important;overflow-y:auto!important;overflow-x:hidden!important}',
-        '.stock-modal .stock-detail>.detail-watermark{display:block!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;overflow:hidden!important;pointer-events:none!important;z-index:0!important}',
-        '.stock-modal .stock-detail>.detail-watermark>svg{position:absolute!important;top:50%!important;left:50%!important;width:72%!important;height:72%!important;transform:translate(-50%,-42%)!important;overflow:visible!important;pointer-events:none!important;opacity:.045!important;z-index:0!important}',
-        '.stock-modal .stock-detail> :not(.detail-watermark){position:relative;z-index:1}',
-        '.stock-modal .stock-detail .detail-score-block{background:transparent!important;background-image:none!important}',
-        '.stock-modal .stock-detail .dd-card{background:transparent!important;background-image:none!important}',
-        '.stock-modal .stock-detail .dd-card.promoter{background:transparent!important;background-image:none!important}',
-        '.stock-modal .stock-detail .activity-grid{background:transparent!important;background-image:none!important}',
-        '.stock-modal .stock-detail .activity{background:transparent!important;background-image:none!important}'
-      ].join('');
-
-      function installAnalysisWatermarkOverride() {
-        if (!document.head || !document.getElementById('stock-modal')) return;
-        var old = document.getElementById('analysis-watermark-runtime-override');
-        if (old) old.remove();
-        var style = document.createElement('style');
-        style.id = 'analysis-watermark-runtime-override';
-        style.textContent = overrideCss;
-        document.head.appendChild(style);
-      }
-
-      function watchAnalysisStyles() {
-        installAnalysisWatermarkOverride();
-        if (!document.head) return;
-        var observer = new MutationObserver(function (mutations) {
-          var changed = mutations.some(function (m) {
-            return Array.prototype.some.call(m.addedNodes, function (node) {
-              return node !== document.getElementById('analysis-watermark-runtime-override');
-            });
-          });
-          if (!changed) return;
-          observer.disconnect();
-          installAnalysisWatermarkOverride();
-          observer.observe(document.head, { childList: true });
-        });
-        observer.observe(document.head, { childList: true });
-      }
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', watchAnalysisStyles, { once: true });
-      } else {
-        watchAnalysisStyles();
-      }
-    })();
-  </script>
 
   <script src="{{ url_for('static', filename='js/scan.js') }}?v={{ scan_js_version }}" defer></script>
   <script src="{{ url_for('static', filename='js/stock-detail-dashboard-v2.js') }}?v={{ scan_js_version }}" defer></script>
