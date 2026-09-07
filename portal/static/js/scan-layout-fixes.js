@@ -36,6 +36,12 @@
       '.stock-modal .stock-detail .ov-row{font-size:.78rem!important;padding:8px 0!important}',
       '.stock-modal .stock-detail .ov-row span{color:#64748b!important;text-transform:uppercase!important;letter-spacing:.045em!important}',
       '.stock-modal .stock-detail .ov-row b{font-size:.8rem!important;color:#172554!important;text-transform:none!important;letter-spacing:normal!important}',
+      '.stock-modal .stock-detail .ov-row b.signed-positive{color:#15803d!important}',
+      '.stock-modal .stock-detail .ov-row b.signed-negative{color:#b91c1c!important}',
+      '.stock-modal .stock-detail .market-sub.signed-positive{color:#15803d!important}',
+      '.stock-modal .stock-detail .market-sub.signed-negative{color:#b91c1c!important}',
+      '.stock-modal .stock-detail .timing b.signed-positive{color:#15803d!important}',
+      '.stock-modal .stock-detail .timing b.signed-negative{color:#b91c1c!important}',
       '.stock-modal .stock-detail .market-cell label,.stock-modal .stock-detail .activity label,.stock-modal .stock-detail .timing label,.stock-modal .stock-detail .dd-section,.stock-modal .stock-detail .range-values small{display:block!important;text-transform:uppercase!important;letter-spacing:.045em!important}',
       '.stock-modal .stock-detail .market-big,.stock-modal .stock-detail .market-sub,.stock-modal .stock-detail .activity b,.stock-modal .stock-detail .timing b,.stock-modal .stock-detail .range-values b{ text-transform:none!important;letter-spacing:normal!important}',
       '.signed-positive{color:#15803d!important}',
@@ -56,20 +62,54 @@
     });
   }
 
+  function signedClass(text) {
+    var t = (text || '').trim();
+    if (/^\+\s*(?:₹|[$€£])?\d/.test(t)) return 'signed-positive';
+    if (/^-\s*(?:₹|[$€£])?\d/.test(t)) return 'signed-negative';
+    return '';
+  }
+
   function applySignedNumberColors() {
     var roots = document.querySelectorAll('.stock-modal .stock-detail, .stock-cards, .desktop-table-wrap');
     roots.forEach(function (root) {
       root.querySelectorAll('*').forEach(function (el) {
         if (el.children.length) return;
-        var text = (el.textContent || '').trim();
-        if (/^\+\s*(?:₹|[$€£])?\d/.test(text)) {
-          el.classList.add('signed-positive');
-          el.classList.remove('signed-negative');
-        } else if (/^-\s*(?:₹|[$€£])?\d/.test(text)) {
-          el.classList.add('signed-negative');
-          el.classList.remove('signed-positive');
-        }
+        var cls = signedClass(el.textContent || '');
+        if (!cls) return;
+        el.classList.add(cls);
+        el.classList.remove(cls === 'signed-positive' ? 'signed-negative' : 'signed-positive');
       });
+    });
+  }
+
+  function applyPromoterReferenceConsistency() {
+    document.querySelectorAll('.stock-modal .stock-detail').forEach(function (detail) {
+      var currentCell = Array.prototype.find.call(detail.querySelectorAll('.market-cell'), function (cell) {
+        var label = cell.querySelector('label');
+        return label && label.textContent.trim().toUpperCase() === 'CURRENT PRICE (CMP)';
+      });
+      if (!currentCell) return;
+      var cmpEl = currentCell.querySelector('.market-big');
+      var subEl = currentCell.querySelector('.market-sub');
+      if (!cmpEl || !subEl) return;
+
+      var avgEl = Array.prototype.find.call(detail.querySelectorAll('.timing'), function (cell) {
+        var label = cell.querySelector('label');
+        return label && label.textContent.trim().toUpperCase() === 'AVG BUY PRICE';
+      });
+      var avgValue = avgEl && avgEl.querySelector('b');
+      if (!avgValue) return;
+
+      var cmp = parseFloat((cmpEl.textContent || '').replace(/[^0-9.]/g, ''));
+      var avg = parseFloat((avgValue.textContent || '').replace(/[^0-9.]/g, ''));
+      if (!Number.isFinite(cmp) || !Number.isFinite(avg) || avg === 0) return;
+
+      var diff = ((cmp - avg) / avg) * 100;
+      var text = (diff > 0 ? '+' : '') + diff.toFixed(1) + '% vs promoter avg';
+      subEl.textContent = text;
+      var cls = signedClass(text);
+      subEl.classList.remove('signed-positive', 'signed-negative');
+      if (cls) subEl.classList.add(cls);
     });
   }
 
@@ -126,6 +166,7 @@
     applyAnalysisScroll();
     initTransactionNavigation();
     applySignedNumberColors();
+    applyPromoterReferenceConsistency();
   }
 
   applyAll();
