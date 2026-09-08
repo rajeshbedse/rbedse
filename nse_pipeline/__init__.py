@@ -1,2 +1,2 @@
-"""NSE Insider Trading Weekly Pipeline."""
-__version__ = "1.2.1"
+"""NSE Insider Trading pipeline package."""
+__version__ = "1.2.0"
