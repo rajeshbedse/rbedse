@@ -38,6 +38,11 @@ def _download_close_bhavcopy(max_lookback: int = 5, as_of_date=None):
     the last traded price (LastPric). DMA calculations already use ClsPric.
     This function mirrors analyzer._download_bhavcopy but deliberately reads
     ClsPric so CMP and the technical indicators use the same price basis.
+
+    The return shape intentionally matches analyzer._download_bhavcopy:
+    {symbol: {"LastPrice": float}}.  analyzer._fetch_prices() consumes that
+    shape, so the pipeline override must not return the legacy {symbol: float}
+    form.
     """
     base = (
         "https://nsearchives.nseindia.com/content/cm/"
@@ -77,7 +82,7 @@ def _download_close_bhavcopy(max_lookback: int = 5, as_of_date=None):
                 if sym in prices and series != "EQ":
                     continue
                 try:
-                    prices[sym] = float(row["ClsPric"])
+                    prices[sym] = {"LastPrice": float(row["ClsPric"])}
                 except (ValueError, KeyError):
                     pass
             logging.getLogger(__name__).info(
