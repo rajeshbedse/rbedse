@@ -29,15 +29,9 @@ _OUTPUT_ROOT = _REPO_ROOT / OUTPUT_ROOT
 
 
 def _download_close_bhavcopy(max_lookback: int = 5, as_of_date=None):
-    base = (
-        "https://nsearchives.nseindia.com/content/cm/"
-        "BhavCopy_NSE_CM_0_0_0_{date}_F_0000.csv.zip"
-    )
-    headers = {
-        "User-Agent": USER_AGENT,
-        "Accept": "*/*",
-        "Referer": "https://www.nseindia.com/",
-    }
+    """Download NSE ClsPric using the same Bhavcopy lookup as the analyzer."""
+    base = "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_{date}_F_0000.csv.zip"
+    headers = {"User-Agent": USER_AGENT, "Accept": "*/*", "Referer": "https://www.nseindia.com/"}
     session = requests.Session()
     session.headers.update(headers)
     today = as_of_date or datetime.now().date()
@@ -48,9 +42,8 @@ def _download_close_bhavcopy(max_lookback: int = 5, as_of_date=None):
             continue
         ds = d.strftime("%Y%m%d")
         attempted.append(ds)
-        url = base.format(date=ds)
         try:
-            resp = session.get(url, timeout=20)
+            resp = session.get(base.format(date=ds), timeout=20)
             if resp.status_code != 200 or resp.content[:2] != b"PK":
                 continue
             z = zipfile.ZipFile(io.BytesIO(resp.content))
@@ -65,35 +58,20 @@ def _download_close_bhavcopy(max_lookback: int = 5, as_of_date=None):
                 if sym in prices and series != "EQ":
                     continue
                 try:
-                    prices[sym] = float(row["ClsPric"])
+                    prices[sym] = {"LastPrice": float(row["ClsPric"])}
                 except (ValueError, KeyError):
-                    pass
-            logging.getLogger(__name__).info(
-                "  CMP prices loaded from NSE closing price for %s — %d symbols",
-                d.strftime("%Y-%m-%d"), len(prices),
-            )
+                    prices[sym] = {"LastPrice": None}
+            logging.getLogger(__name__).info("  CMP prices loaded from NSE closing price for %s — %d symbols", d.strftime("%Y-%m-%d"), len(prices))
             return prices
         except Exception as exc:
-            logging.getLogger(__name__).warning(
-                "  NSE closing-price fetch failed for %s: %s", ds, exc
-            )
-    logging.getLogger(__name__).warning(
-        "  NSE closing-price Bhavcopy: no file found for dates %s", attempted
-    )
+            logging.getLogger(__name__).warning("  NSE closing-price fetch failed for %s: %s", ds, exc)
+    logging.getLogger(__name__).warning("  NSE closing-price Bhavcopy: no file found for dates %s", attempted)
     return None
 
 
 def _setup_logging(log_path: Path) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s  %(message)s",
-        datefmt="%H:%M:%S",
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(log_path, encoding="utf-8"),
-        ],
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s", datefmt="%H:%M:%S", handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler(log_path, encoding="utf-8")])
 
 
 def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = False) -> Path:
@@ -126,38 +104,32 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
                 log.info("Reused existing NSE snapshot: %d rows", raw_count)
             except Exception as exc:
                 log.error("Could not read existing NSE snapshot: %s", exc)
-                raw_count = 0
         else:
             raw_count = scraper.run(ctx, csv_path)
         browser.close()
     if dry_run:
         log.info("\nDry run complete. CSV written to: %s", csv_path.resolve())
-        log.info("Re-run without --dry-run to proceed with enrichment and export.")
         return run_dir
     if raw_count == 0:
         duration = round(time.monotonic() - pipeline_start)
         meta = {"run_date": date_str, "generated_at": datetime.now(timezone.utc).isoformat(), "status": "no_data", "filing_period": NSE_FILING_PERIOD, "raw_filings": 0, "failed_urls": 0, "candidates": 0, "shortlisted": 0, "duration_s": duration, "pipeline_version": __version__}
         meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
         log.info("No NSE filings found for %s. Skipping enrichment.", date_str)
-        log.info("meta.json → %s", meta_path)
         return run_dir
     analyzer._download_bhavcopy = _download_close_bhavcopy
     as_of = datetime.strptime(date_str, "%Y-%m-%d").date()
     final = analyzer.run(csv_path, full_csv, as_of_date=as_of)
     reporter.run(final, excel_path)
     duration = round(time.monotonic() - pipeline_start)
-    candidates = 0
     try:
         candidates = len(pd.read_csv(full_csv, encoding="utf-8-sig"))
     except Exception:
-        pass
+        candidates = 0
     failed_path = run_dir / "failed_urls.txt"
     failed_urls = 0
     if failed_path.exists():
-        try:
-            failed_urls = max(0, len(failed_path.read_text(encoding="utf-8").splitlines()) - 1)
-        except Exception:
-            failed_urls = 0
+        try: failed_urls = max(0, len(failed_path.read_text(encoding="utf-8").splitlines()) - 1)
+        except Exception: failed_urls = 0
     meta = {"run_date": date_str, "generated_at": datetime.now(timezone.utc).isoformat(), "status": "success", "filing_period": NSE_FILING_PERIOD, "raw_filings": raw_count, "failed_urls": failed_urls, "candidates": candidates, "shortlisted": len(final), "duration_s": duration, "pipeline_version": __version__}
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     log.info("meta.json → %s", meta_path)
