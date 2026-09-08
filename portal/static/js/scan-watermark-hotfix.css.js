@@ -1,4 +1,4 @@
-/* RYB Finserv — watermark visibility / transparent cards + DMA display fix v6 */
+/* RYB Finserv — watermark visibility / transparent cards + DMA display fix v7 */
 (function () {
   'use strict';
 
@@ -52,25 +52,26 @@
     fetch('/api/scan/' + date + '/stock/' + encodeURIComponent(symbol))
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (row) {
-        var signals = Array.isArray(row.tech_signals) ? row.tech_signals : [];
-        function signalValue(label, directKey) {
-          var direct = Number(row[directKey]);
-          if (Number.isFinite(direct) && direct > 0) return direct;
-          var signal = signals.find(function (s) { return s && s.label === label; });
-          var note = signal && String(signal.note || '');
-          var match = note.match(/₹\s*([0-9]+(?:\.[0-9]+)?)/);
-          return match ? Number(match[1]) : null;
+        var dma50 = Number(row.dma50);
+        var dma200 = Number(row.dma200);
+        if (!Number.isFinite(dma50) || dma50 <= 0 || !Number.isFinite(dma200) || dma200 <= 0) {
+          var signals = Array.isArray(row.tech_signals) ? row.tech_signals : [];
+          function signalValue(label) {
+            var signal = signals.find(function (s) { return s && s.label === label; });
+            var note = signal && String(signal.note || '');
+            var match = note.match(/₹\s*([0-9]+(?:\.[0-9]+)?)/);
+            return match ? Number(match[1]) : null;
+          }
+          if (!Number.isFinite(dma50) || dma50 <= 0) dma50 = signalValue('Price > 50 DMA');
+          if (!Number.isFinite(dma200) || dma200 <= 0) dma200 = signalValue('Price > 200 DMA');
         }
-
-        var dma50 = signalValue('Price > 50 DMA', 'DMA50');
-        var dma200 = signalValue('Price > 200 DMA', 'DMA200');
         Array.prototype.forEach.call(technical.querySelectorAll('.ov-row'), function (rowEl) {
           var labelEl = rowEl.querySelector('span');
           var valueEl = rowEl.querySelector('b');
           if (!labelEl || !valueEl) return;
           var label = labelEl.textContent.trim();
           var value = label === '50 DMA' ? dma50 : label === '200 DMA' ? dma200 : null;
-          if (value !== null && Number.isFinite(value)) {
+          if (value !== null && Number.isFinite(value) && value > 0) {
             valueEl.textContent = '₹' + value.toLocaleString('en-IN', { maximumFractionDigits: 2 });
           }
         });
