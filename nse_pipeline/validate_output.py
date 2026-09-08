@@ -36,6 +36,8 @@ FULL_REQUIRED_COLUMNS = {
     "Symbol",
     "CompanyName",
     "LastPrice",
+    "52WeekHigh",
+    "52WeekLow",
     "AvgPrice",
     "PriceDiffPct",
     "PromoHolding",
@@ -167,6 +169,32 @@ def validate(run_dir: Path) -> list[str]:
                 errors.append(
                     "Enriched CSV contains zero candidates"
                 )
+
+            if "52WeekHigh" in full.columns and "52WeekLow" in full.columns and not full.empty:
+                high = pd.to_numeric(full["52WeekHigh"], errors="coerce")
+                low = pd.to_numeric(full["52WeekLow"], errors="coerce")
+                high_count = int(high.notna().sum())
+                low_count = int(low.notna().sum())
+                both_count = int((high.notna() & low.notna()).sum())
+                coverage = both_count / len(full) * 100
+                print(
+                    f"52W validation: {both_count}/{len(full)} rows have both High+Low "
+                    f"({coverage:.1f}%) | High populated={high_count} | Low populated={low_count}"
+                )
+                if both_count == 0:
+                    errors.append(
+                        "NSE 52-week High/Low extraction produced no populated High+Low values"
+                    )
+                elif coverage < 95:
+                    warnings.append(
+                        f"NSE 52-week High/Low coverage is only {coverage:.1f}% "
+                        "of enriched rows"
+                    )
+                invalid_range = (high.notna() & low.notna() & ((high <= 0) | (low <= 0) | (high < low))).sum()
+                if int(invalid_range) > 0:
+                    errors.append(
+                        f"NSE 52-week High/Low contains {int(invalid_range)} invalid ranges"
+                    )
 
             if "Score" in full.columns:
                 scores = pd.to_numeric(
