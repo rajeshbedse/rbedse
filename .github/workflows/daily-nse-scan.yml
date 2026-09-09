@@ -8,11 +8,8 @@ on:
         required: false
         type: string
   schedule:
-    # 20:30 IST, Monday-Saturday — generate today's report
-    - cron: "30 20 * * 1-6"
-      timezone: "Asia/Kolkata"
-    # 08:00 IST, Tuesday-Saturday — refresh previous day's report
-    - cron: "0 8 * * 2-6"
+    # Run the production NSE scan every 2 hours, Monday-Saturday (IST).
+    - cron: "0 */2 * * 1-6"
       timezone: "Asia/Kolkata"
 
 permissions:
@@ -56,20 +53,15 @@ jobs:
         id: date
         shell: bash
         env:
-          SCHEDULE: ${{ github.event.schedule }}
           INPUT_DATE: ${{ inputs.run_date }}
         run: |
           if [ -n "$INPUT_DATE" ]; then
             echo "run_date=$INPUT_DATE" >> "$GITHUB_OUTPUT"
             echo "Run mode: manual"
             echo "Report date: $INPUT_DATE"
-          elif [ "$SCHEDULE" = "0 8 * * 2-6" ]; then
-            echo "run_date=$(TZ=Asia/Kolkata date -d 'yesterday' +%F)" >> "$GITHUB_OUTPUT"
-            echo "Run mode: morning refresh"
-            echo "Report date: previous IST day"
           else
             echo "run_date=$(TZ=Asia/Kolkata date +%F)" >> "$GITHUB_OUTPUT"
-            echo "Run mode: evening scan"
+            echo "Run mode: scheduled production scan"
             echo "Report date: current IST day"
           fi
 
