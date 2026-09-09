@@ -48,9 +48,9 @@ jobs:
 
       - name: Install Chromium and virtual display
         run: |
-          python -m playwright install --with-deps chromium
           sudo apt-get update
           sudo apt-get install -y xvfb
+          python -m playwright install chromium
 
       - name: Determine run date
         id: date
