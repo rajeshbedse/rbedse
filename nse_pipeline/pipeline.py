@@ -23,6 +23,7 @@ from .config import (
     TRADES_CSV_FILENAME, LOG_FILENAME, USER_AGENT, BROWSER_ARGS, NSE_FILING_PERIOD,
 )
 from . import scraper, analyzer, reporter
+from .promoter_signals import build_promoter_signals, write_promoter_signals
 
 _REPO_ROOT = Path(__file__).parent.parent
 _OUTPUT_ROOT = _REPO_ROOT / OUTPUT_ROOT
@@ -74,6 +75,73 @@ def _setup_logging(log_path: Path) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s", datefmt="%H:%M:%S", handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler(log_path, encoding="utf-8")])
 
 
+def _merge_promoter_verification(full_csv: Path, raw_csv: Path, run_dir: Path, log) -> None:
+    """Merge independent BUY/SELL/PLEDGE intelligence into enriched_full.csv.
+
+    The analyzer remains the scoring engine.  This verification layer is deliberately
+    independent so SELL/PLEDGE can never remove a qualifying BUY candidate before the
+    raw promoter evidence is visible in the full enrichment output.
+    """
+    signals = build_promoter_signals(raw_csv)
+    signals_path = run_dir / "promoter_signals.csv"
+    signals.to_csv(signals_path, index=False, encoding="utf-8-sig")
+
+    if not full_csv.exists():
+        log.warning("Cannot merge promoter verification: %s does not exist", full_csv)
+        return
+
+    enriched = pd.read_csv(full_csv, encoding="utf-8-sig")
+    if signals.empty:
+        log.info("Independent promoter verification found no promoter BUY/SELL/PLEDGE events")
+        return
+
+    # The scored universe is BUY-led.  Keep every qualifying BUY candidate in
+    # enriched_full.csv, including those filtered from the scoring universe by
+    # the legacy pledge/sell-ratio gates.  Enrichment/score columns for such
+    # rows remain blank rather than fabricating values.
+    buy_signals = signals[signals["QualifiedBuy"]].copy()
+    if buy_signals.empty:
+        log.info("No qualifying promoter BUY candidates in independent verification")
+        return
+
+    existing = set(enriched["Symbol"].astype(str).str.strip().str.upper()) if "Symbol" in enriched.columns else set()
+    missing = buy_signals[~buy_signals["Symbol"].astype(str).str.strip().str.upper().isin(existing)].copy()
+
+    if not missing.empty:
+        # Keep the output schema stable: create analyzer columns as blank for
+        # BUY candidates that were previously hard-filtered before enrichment.
+        for col in enriched.columns:
+            if col not in missing.columns:
+                missing[col] = pd.NA
+        for col in missing.columns:
+            if col not in enriched.columns:
+                enriched[col] = pd.NA
+        missing = missing[enriched.columns]
+        enriched = pd.concat([enriched, missing], ignore_index=True)
+
+    signal_cols = [
+        "BuyValue", "SellValue", "NetBuyValue", "SellBuyRatioPct",
+        "BuyTxn", "SellTxn", "PledgeTxn", "PledgeValue", "QualifiedBuy",
+        "HasMarketSell", "HasPledge", "PromoterSignal",
+    ]
+    for col in signal_cols:
+        if col in enriched.columns:
+            enriched = enriched.drop(columns=[col])
+    enriched = enriched.merge(
+        signals[["Symbol", *signal_cols]],
+        on="Symbol", how="left", validate="one_to_one",
+    )
+
+    # Align the legacy names used by the scoring/reporting layer with the
+    # independent verification result.  HasPledging is now evidence, not an
+    # exclusion gate in the verification output.
+    if "HasPledge" in enriched.columns:
+        enriched["HasPledging"] = enriched["HasPledge"].fillna(False).astype(bool)
+    enriched.to_csv(full_csv, index=False, encoding="utf-8-sig")
+    log.info("Independent promoter verification → %s (%d qualifying BUY candidates; %d with SELL; %d with PLEDGE)", signals_path, len(buy_signals), int(buy_signals["HasMarketSell"].sum()), int(buy_signals["HasPledge"].sum()))
+    log.info("Merged BUY/SELL/PLEDGE verification into %s; added %d previously filtered BUY candidates", full_csv, len(missing))
+
+
 def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = False) -> Path:
     date_str = run_date or datetime.now().strftime("%Y-%m-%d")
     run_dir = _OUTPUT_ROOT / date_str
@@ -119,6 +187,7 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     analyzer._download_bhavcopy = _download_close_bhavcopy
     as_of = datetime.strptime(date_str, "%Y-%m-%d").date()
     final = analyzer.run(csv_path, full_csv, as_of_date=as_of)
+    _merge_promoter_verification(full_csv, csv_path, run_dir, log)
     reporter.run(final, excel_path)
     duration = round(time.monotonic() - pipeline_start)
     try:
