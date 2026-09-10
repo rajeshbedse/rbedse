@@ -1,10 +1,10 @@
 {
   "run_date": "2026-09-10",
-  "generated_at": "2026-09-10T00:34:51.316841+00:00",
+  "generated_at": "2026-09-10T05:12:32.027185+00:00",
   "status": "success",
   "filing_period": "3M",
-  "raw_filings": 3689,
-  "failed_urls": 0,
+  "raw_filings": 3633,
+  "failed_urls": 14,
   "candidates": 86,
   "shortlisted": 48,
   "duration_s": 497,
