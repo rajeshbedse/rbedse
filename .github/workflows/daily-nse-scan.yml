@@ -8,7 +8,6 @@ on:
         required: false
         type: string
   schedule:
-    # Run the production NSE scan every 2 hours, Monday-Saturday (IST).
     - cron: "0 */2 * * 1-6"
       timezone: "Asia/Kolkata"
 
@@ -21,11 +20,9 @@ concurrency:
 
 jobs:
   generate-data:
-    # Production pipeline is allowed to execute only from main.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
-
     steps:
       - name: Checkout production branch
         uses: actions/checkout@v4
@@ -57,19 +54,14 @@ jobs:
         run: |
           if [ -n "$INPUT_DATE" ]; then
             echo "run_date=$INPUT_DATE" >> "$GITHUB_OUTPUT"
-            echo "Run mode: manual"
-            echo "Report date: $INPUT_DATE"
           else
             echo "run_date=$(TZ=Asia/Kolkata date +%F)" >> "$GITHUB_OUTPUT"
-            echo "Run mode: scheduled production scan"
-            echo "Report date: current IST day"
           fi
 
       - name: Run NSE pipeline
         env:
           PYTHONUNBUFFERED: "1"
-        run: |
-          xvfb-run -a python -m nse_pipeline.pipeline --date "${{ steps.date.outputs.run_date }}"
+        run: xvfb-run -a python -m nse_pipeline.pipeline --date "${{ steps.date.outputs.run_date }}"
 
       - name: Validate generated snapshot
         run: |
@@ -77,7 +69,7 @@ jobs:
           ls -lah "output/${RUN_DATE}/"
           python -m nse_pipeline.validate_output --date "${RUN_DATE}"
 
-      - name: Publish research snapshot to RYB
+      - name: Publish research data to RYB
         if: ${{ env.RYB_REPO_TOKEN != '' }}
         env:
           RUN_DATE: ${{ steps.date.outputs.run_date }}
@@ -89,20 +81,18 @@ jobs:
             echo "Snapshot is not publishable (${STATUS}); skipping RYB publish."
             exit 0
           fi
-
           rm -rf /tmp/RYB
           git clone --depth 1 "https://x-access-token:${RYB_REPO_TOKEN}@github.com/rajeshbedse/RYB.git" /tmp/RYB
           python /tmp/RYB/scripts/build_snapshot.py "${GITHUB_WORKSPACE}/output/${RUN_DATE}"
-
           cd /tmp/RYB
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/snapshot.json
+          git add data/snapshot.json data/stock_details.json
           if git diff --cached --quiet; then
-            echo "RYB snapshot is unchanged."
+            echo "RYB research data is unchanged."
             exit 0
           fi
-          git commit -m "Publish research snapshot: ${RUN_DATE}"
+          git commit -m "Publish research data: ${RUN_DATE}"
           git push origin HEAD:main
 
       - name: Publish daily snapshot to main only
@@ -111,20 +101,16 @@ jobs:
         run: |
           STATUS=$(python -c "import json; print(json.load(open('output/${RUN_DATE}/meta.json', encoding='utf-8-sig')).get('status', 'unknown'))")
           echo "Snapshot status: ${STATUS}"
-
           if [ "${STATUS}" != "success" ]; then
             echo "Snapshot is not publishable (${STATUS}). Nothing will be committed."
             exit 0
           fi
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "output/${RUN_DATE}/"
-
           if git diff --cached --quiet; then
             echo "No output changes to commit."
             exit 0
           fi
-
           git commit -m "Daily NSE scan: ${RUN_DATE}"
           git push origin HEAD:main
