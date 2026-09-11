@@ -23,6 +23,7 @@ from .config import (
     TRADES_CSV_FILENAME, LOG_FILENAME, USER_AGENT, BROWSER_ARGS, NSE_FILING_PERIOD,
 )
 from . import scraper, analyzer, reporter
+from .research_enrichment import build_research_datasets
 
 _REPO_ROOT = Path(__file__).parent.parent
 _OUTPUT_ROOT = _REPO_ROOT / OUTPUT_ROOT
@@ -119,6 +120,16 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     analyzer._download_bhavcopy = _download_close_bhavcopy
     as_of = datetime.strptime(date_str, "%Y-%m-%d").date()
     final = analyzer.run(csv_path, full_csv, as_of_date=as_of)
+
+    # Additive research layer for the new RYB repository. Existing outputs,
+    # scoring and reporter behaviour remain unchanged; failures here should be
+    # visible but must not destroy the core Daily NSE Scan result.
+    try:
+        build_research_datasets(csv_path, full_csv, run_dir, as_of_date=as_of)
+    except Exception as exc:
+        log.exception("Research dataset enrichment failed; core pipeline output is retained: %s", exc)
+        (run_dir / "research_enrichment_error.txt").write_text(str(exc), encoding="utf-8")
+
     reporter.run(final, excel_path)
     duration = round(time.monotonic() - pipeline_start)
     try:
