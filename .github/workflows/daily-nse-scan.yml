@@ -77,6 +77,34 @@ jobs:
           ls -lah "output/${RUN_DATE}/"
           python -m nse_pipeline.validate_output --date "${RUN_DATE}"
 
+      - name: Publish research snapshot to RYB
+        if: ${{ env.RYB_REPO_TOKEN != '' }}
+        env:
+          RUN_DATE: ${{ steps.date.outputs.run_date }}
+          RYB_REPO_TOKEN: ${{ secrets.RYB_REPO_TOKEN }}
+        shell: bash
+        run: |
+          STATUS=$(python -c "import json; print(json.load(open('output/${RUN_DATE}/meta.json', encoding='utf-8-sig')).get('status', 'unknown'))")
+          if [ "${STATUS}" != "success" ]; then
+            echo "Snapshot is not publishable (${STATUS}); skipping RYB publish."
+            exit 0
+          fi
+
+          rm -rf /tmp/RYB
+          git clone --depth 1 "https://x-access-token:${RYB_REPO_TOKEN}@github.com/rajeshbedse/RYB.git" /tmp/RYB
+          python /tmp/RYB/scripts/build_snapshot.py "${GITHUB_WORKSPACE}/output/${RUN_DATE}"
+
+          cd /tmp/RYB
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/snapshot.json
+          if git diff --cached --quiet; then
+            echo "RYB snapshot is unchanged."
+            exit 0
+          fi
+          git commit -m "Publish research snapshot: ${RUN_DATE}"
+          git push origin HEAD:main
+
       - name: Publish daily snapshot to main only
         env:
           RUN_DATE: ${{ steps.date.outputs.run_date }}
