@@ -110,7 +110,12 @@ jobs:
           python scripts/validate_snapshot.py
           test -s data/snapshot.json
           test -d data/stocks
-          test "$(find data/stocks -maxdepth 1 -name '*.json' | wc -l)" -gt 0
+          test -d data/history
+          CORE_COUNT=$(find data/stocks -maxdepth 1 -name '*.json' | wc -l)
+          HISTORY_COUNT=$(find data/history -maxdepth 1 -name '*.json' | wc -l)
+          test "${CORE_COUNT}" -gt 0
+          test "${CORE_COUNT}" -eq "${HISTORY_COUNT}"
+          test ! -e data/stock_details.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A data/
