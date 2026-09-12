@@ -89,10 +89,11 @@ jobs:
           cd /tmp/RYB
           python scripts/build_snapshot.py "${GITHUB_WORKSPACE}/output/${RUN_DATE}"
           test -s data/snapshot.json
-          test -s data/stock_details.json
+          test -d data/stocks
+          test "$(find data/stocks -maxdepth 1 -name '*.json' | wc -l)" -gt 0
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/snapshot.json data/stock_details.json
+          git add -A data/
           if git diff --cached --quiet; then
             echo "RYB research data is unchanged."
             exit 0
