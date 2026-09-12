@@ -82,6 +82,7 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     csv_path = run_dir / CSV_FILENAME
     excel_path = run_dir / EXCEL_FILENAME
     full_csv = run_dir / FULL_CSV_FILENAME
+    ryb_scan_csv = run_dir / "ryb_scan.csv"
     log_path = run_dir / LOG_FILENAME
     meta_path = run_dir / "meta.json"
     pipeline_start = time.monotonic()
@@ -121,11 +122,17 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     as_of = datetime.strptime(date_str, "%Y-%m-%d").date()
     final = analyzer.run(csv_path, full_csv, as_of_date=as_of)
 
+    # Canonical integration contract for RYB: this is the actual final shortlist
+    # returned by the analyzer, not the larger post-filter enriched universe.
+    # Existing production outputs remain unchanged; this is additive.
+    final.to_csv(ryb_scan_csv, index=False, encoding="utf-8-sig")
+    log.info("RYB canonical scan → %s (%d shortlisted symbols)", ryb_scan_csv, len(final))
+
     # Additive research layer for the new RYB repository. Existing outputs,
     # scoring and reporter behaviour remain unchanged; failures here should be
     # visible but must not destroy the core Daily NSE Scan result.
     try:
-        build_research_datasets(csv_path, full_csv, run_dir, as_of_date=as_of)
+        build_research_datasets(csv_path, ryb_scan_csv, run_dir, as_of_date=as_of)
     except Exception as exc:
         log.exception("Research dataset enrichment failed; core pipeline output is retained: %s", exc)
         (run_dir / "research_enrichment_error.txt").write_text(str(exc), encoding="utf-8")
