@@ -70,12 +70,15 @@ jobs:
           python -m nse_pipeline.validate_output --date "${RUN_DATE}"
 
       - name: Publish research data to RYB
-        if: ${{ env.RYB_REPO_TOKEN != '' }}
         env:
           RUN_DATE: ${{ steps.date.outputs.run_date }}
           RYB_REPO_TOKEN: ${{ secrets.RYB_REPO_TOKEN }}
         shell: bash
         run: |
+          if [ -z "${RYB_REPO_TOKEN}" ]; then
+            echo "RYB_REPO_TOKEN is not configured; skipping RYB publish."
+            exit 0
+          fi
           STATUS=$(python -c "import json; print(json.load(open('output/${RUN_DATE}/meta.json', encoding='utf-8-sig')).get('status', 'unknown'))")
           if [ "${STATUS}" != "success" ]; then
             echo "Snapshot is not publishable (${STATUS}); skipping RYB publish."
