@@ -166,9 +166,11 @@ def _install_risk_aware_inclusion(analyzer_module) -> None:
             agg["PledgeBuyRatioPct"] + agg["MarketSellBuyRatioPct"]
         ).round(2)
 
-        # The legacy analyzer hard-excludes pledges and >25% market sells.
-        # RYB now retains every stock with a qualifying promoter market buy.
+        # Do not allow the legacy hard filters or the legacy fixed "no sell"
+        # bonus to affect RYB. The graduated risk calculation below is the
+        # single decision signal for these activities.
         agg["SellBuyExclusion"] = False
+        agg["HasMarketSell"] = False
         log.info(
             "RYB risk-aware inclusion: %d buy candidates retained; pledge/sell are risk signals, not hard exclusions",
             len(agg),
@@ -181,8 +183,10 @@ def _install_risk_aware_inclusion(analyzer_module) -> None:
 
     def score_row(row, fund):
         promo, fund_score, tech, risk, _total, _category = original_score(row, fund)
-        pledge_pct = float(pd.to_numeric(row.get("PledgeBuyRatioPct", 0), errors="coerce") or 0)
-        sell_pct = float(pd.to_numeric(row.get("MarketSellBuyRatioPct", 0), errors="coerce") or 0)
+        pledge_pct = pd.to_numeric(row.get("PledgeBuyRatioPct", 0), errors="coerce")
+        sell_pct = pd.to_numeric(row.get("MarketSellBuyRatioPct", 0), errors="coerce")
+        pledge_pct = 0.0 if pd.isna(pledge_pct) else float(pledge_pct)
+        sell_pct = 0.0 if pd.isna(sell_pct) else float(sell_pct)
         risk_delta = max(-10, _risk_deduction(pledge_pct) + _risk_deduction(sell_pct))
         risk += risk_delta
         total = max(0, min(100, promo + fund_score + tech + risk))
