@@ -22,8 +22,9 @@ from .config import (
     OUTPUT_ROOT, CSV_FILENAME, EXCEL_FILENAME, FULL_CSV_FILENAME,
     TRADES_CSV_FILENAME, LOG_FILENAME, USER_AGENT, BROWSER_ARGS, NSE_FILING_PERIOD,
 )
-from . import scraper, analyzer, reporter
+from . import scraper, analyzer, reporter, research_enrichment
 from .research_enrichment import build_research_datasets
+from .robust_fallbacks import install as install_robust_fallbacks
 
 _REPO_ROOT = Path(__file__).parent.parent
 _OUTPUT_ROOT = _REPO_ROOT / OUTPUT_ROOT
@@ -120,6 +121,19 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
         return run_dir
     analyzer._download_bhavcopy = _download_close_bhavcopy
     as_of = datetime.strptime(date_str, "%Y-%m-%d").date()
+
+    # Resilience layer: preserve the freshest available NSE 52-week values from
+    # the previous successful run and reuse Screener's classification hierarchy
+    # from the same fundamentals request instead of depending on a second NSE
+    # classification endpoint.
+    install_robust_fallbacks(
+        analyzer,
+        research_enrichment,
+        _OUTPUT_ROOT,
+        as_of,
+        ryb_scan_csv,
+    )
+
     final = analyzer.run(csv_path, full_csv, as_of_date=as_of)
 
     final.to_csv(ryb_scan_csv, index=False, encoding="utf-8-sig")
@@ -146,8 +160,10 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     failed_path = run_dir / "failed_urls.txt"
     failed_urls = 0
     if failed_path.exists():
-        try: failed_urls = max(0, len(failed_path.read_text(encoding="utf-8").splitlines()) - 1)
-        except Exception: failed_urls = 0
+        try:
+            failed_urls = max(0, len(failed_path.read_text(encoding="utf-8").splitlines()) - 1)
+        except Exception:
+            failed_urls = 0
     meta = {"run_date": date_str, "generated_at": datetime.now(timezone.utc).isoformat(), "status": "success", "filing_period": NSE_FILING_PERIOD, "raw_filings": raw_count, "failed_urls": failed_urls, "candidates": candidates, "shortlisted": len(final), "duration_s": duration, "pipeline_version": __version__}
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     log.info("meta.json → %s", meta_path)
