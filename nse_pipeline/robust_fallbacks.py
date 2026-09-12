@@ -162,31 +162,39 @@ def install(
 
     analyzer_module._apply_scores = apply_scores
 
-    # Research enrichment should consume the classification just obtained from
-    # Screener, avoiding a second classification source that is currently less
-    # reliable in automated runs.
-    original_classification = research_enrichment_module.build_company_classification
-
+    # The scan is the canonical classification hand-off. Do not call a second
+    # NSE classification endpoint here: Screener was already queried for the
+    # same symbols during fundamentals enrichment.
     def build_classification(symbols, out_path):
         try:
             scan = pd.read_csv(scan_path, encoding="utf-8-sig")
-            if "Symbol" in scan.columns and all(c in scan.columns for c in _CLASSIFICATION_COLUMNS):
-                cols = ["Symbol", *_CLASSIFICATION_COLUMNS]
-                result = scan[cols].copy()
-                result["Symbol"] = result["Symbol"].astype(str).str.strip().str.upper()
-                populated = result[_CLASSIFICATION_COLUMNS].astype(str).apply(
-                    lambda s: s.str.strip().ne("")
-                ).any(axis=1).sum()
-                if populated > 0:
-                    result.to_csv(out_path, index=False, encoding="utf-8-sig")
-                    log.info(
-                        "Company classification → Screener hierarchy (%d/%d symbols populated)",
-                        populated,
-                        len(result),
-                    )
-                    return len(result)
+            if "Symbol" not in scan.columns:
+                raise ValueError("RYB scan is missing Symbol column")
+            result = scan[["Symbol", *[c for c in _CLASSIFICATION_COLUMNS if c in scan.columns]]].copy()
+            for column in _CLASSIFICATION_COLUMNS:
+                if column not in result.columns:
+                    result[column] = None
+            result = result[["Symbol", *_CLASSIFICATION_COLUMNS]]
+            result["Symbol"] = result["Symbol"].astype(str).str.strip().str.upper()
+            populated = result[_CLASSIFICATION_COLUMNS].astype("string").apply(
+                lambda s: s.str.strip().ne("") & s.notna()
+            ).any(axis=1).sum()
+            result.to_csv(out_path, index=False, encoding="utf-8-sig")
+            log.info(
+                "Company classification → Screener hierarchy (%d/%d symbols populated)",
+                populated,
+                len(result),
+            )
+            return len(result)
         except Exception as exc:
             log.warning("Screener classification reuse failed: %s", exc)
-        return original_classification(symbols, out_path)
+            # Keep the enrichment contract deterministic even when the canonical
+            # scan cannot be read: write a schema-correct empty classification file.
+            result = pd.DataFrame({"Symbol": [str(s).strip().upper() for s in symbols]})
+            for column in _CLASSIFICATION_COLUMNS:
+                result[column] = None
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            result.to_csv(out_path, index=False, encoding="utf-8-sig")
+            return len(result)
 
     research_enrichment_module.build_company_classification = build_classification
