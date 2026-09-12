@@ -68,6 +68,25 @@ jobs:
           RUN_DATE="${{ steps.date.outputs.run_date }}"
           ls -lah "output/${RUN_DATE}/"
           python -m nse_pipeline.validate_output --date "${RUN_DATE}"
+          test -s "output/${RUN_DATE}/ryb_scan.csv"
+          python - <<'PY'
+          import csv, json, os
+          run_date = os.environ["RUN_DATE"]
+          base = os.path.join("output", run_date)
+          with open(os.path.join(base, "meta.json"), encoding="utf-8-sig") as f:
+              meta = json.load(f)
+          with open(os.path.join(base, "ryb_scan.csv"), encoding="utf-8-sig", newline="") as f:
+              rows = list(csv.DictReader(f))
+          expected = int(meta.get("shortlisted", -1))
+          if expected <= 0 or len(rows) != expected:
+              raise SystemExit(f"RYB canonical scan mismatch: meta shortlisted={expected}, ryb_scan rows={len(rows)}")
+          symbols = [r.get("Symbol", "").strip().upper() for r in rows]
+          if not all(symbols) or len(symbols) != len(set(symbols)):
+              raise SystemExit("RYB canonical scan contains blank or duplicate symbols")
+          print(f"RYB canonical scan validated: {len(rows)} final shortlisted symbols")
+          PY
+        env:
+          RUN_DATE: ${{ steps.date.outputs.run_date }}
 
       - name: Publish research data to RYB
         env:
