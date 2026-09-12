@@ -107,6 +107,7 @@ jobs:
           git clone --depth 1 "https://x-access-token:${RYB_REPO_TOKEN}@github.com/rajeshbedse/RYB.git" /tmp/RYB
           cd /tmp/RYB
           python scripts/build_snapshot.py "${GITHUB_WORKSPACE}/output/${RUN_DATE}"
+          python scripts/augment_risk.py "${GITHUB_WORKSPACE}/output/${RUN_DATE}" data
           python scripts/validate_snapshot.py
           test -s data/snapshot.json
           test -d data/stocks
