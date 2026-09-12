@@ -122,15 +122,9 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     as_of = datetime.strptime(date_str, "%Y-%m-%d").date()
     final = analyzer.run(csv_path, full_csv, as_of_date=as_of)
 
-    # Canonical integration contract for RYB: this is the actual final shortlist
-    # returned by the analyzer, not the larger post-filter enriched universe.
-    # Existing production outputs remain unchanged; this is additive.
     final.to_csv(ryb_scan_csv, index=False, encoding="utf-8-sig")
     log.info("RYB canonical scan → %s (%d shortlisted symbols)", ryb_scan_csv, len(final))
 
-    # Additive research layer for the new RYB repository. Existing outputs,
-    # scoring and reporter behaviour remain unchanged; failures here should be
-    # visible but must not destroy the core Daily NSE Scan result.
     try:
         research_manifest = build_research_datasets(csv_path, ryb_scan_csv, run_dir, as_of_date=as_of)
         research_manifest.setdefault("files", {})["ryb_scan"] = ryb_scan_csv.name
@@ -165,12 +159,12 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(prog="nse-pipeline", description="NSE Insider Trading Weekly Pipeline")
-    parser.add_argument("--skip-phase1", action="store_true", help="Skip Phase 1 (scraping) and reuse an existing CSV for today's date")
+    parser.add_argument("--skip-phase1", action="store_true", help="Skip Phase 1 (scrape) and reuse an existing CSV for today's date")
     parser.add_argument("--date", metavar="YYYY-MM-DD", default=None, help="Override the run date (default: today)")
     parser.add_argument("--dry-run", action="store_true", help="Run Phase 1 (scrape) only — no enrichment, no Excel export")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     args = parser.parse_args()
-    run(skip_phase1=args.skip_phase1, run_date=args.run_date, dry_run=args.dry_run)
+    run(skip_phase1=args.skip_phase1, run_date=args.date, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
