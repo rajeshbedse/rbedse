@@ -83,8 +83,10 @@ jobs:
           fi
           rm -rf /tmp/RYB
           git clone --depth 1 "https://x-access-token:${RYB_REPO_TOKEN}@github.com/rajeshbedse/RYB.git" /tmp/RYB
-          python /tmp/RYB/scripts/build_snapshot.py "${GITHUB_WORKSPACE}/output/${RUN_DATE}"
           cd /tmp/RYB
+          python scripts/build_snapshot.py "${GITHUB_WORKSPACE}/output/${RUN_DATE}"
+          test -s data/snapshot.json
+          test -s data/stock_details.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/snapshot.json data/stock_details.json
