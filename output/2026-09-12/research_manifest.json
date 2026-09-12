@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "run_date": "2026-09-12",
+  "source": "RYB Daily NSE Scan",
+  "disclosure_history_note": "Promoter event-derived datasets cover the filing snapshot available to the daily scan; cost/holding history must not be interpreted as complete ownership history outside that window.",
+  "files": {
+    "enriched_full": "enriched_full.csv",
+    "market_price_history": "market_price_history.csv",
+    "promoter_cost_history": "promoter_cost_history.csv",
+    "promoter_activity": "promoter_activity.csv",
+    "promoter_holding_history": "promoter_holding_history.csv",
+    "company_classification": "company_classification.csv"
+  },
+  "counts": {
+    "symbols": 86,
+    "price_history_rows": 21116,
+    "promoter_activity_rows": 510,
+    "promoter_holding_history_rows": 692,
+    "company_classification_rows": 86,
+    "promoter_cost_history_rows": 21116
+  }
+}
