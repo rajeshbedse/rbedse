@@ -132,7 +132,13 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     # scoring and reporter behaviour remain unchanged; failures here should be
     # visible but must not destroy the core Daily NSE Scan result.
     try:
-        build_research_datasets(csv_path, ryb_scan_csv, run_dir, as_of_date=as_of)
+        research_manifest = build_research_datasets(csv_path, ryb_scan_csv, run_dir, as_of_date=as_of)
+        research_manifest.setdefault("files", {})["ryb_scan"] = ryb_scan_csv.name
+        research_manifest.setdefault("files", {})["enriched_full"] = full_csv.name
+        research_manifest.setdefault("counts", {})["final_shortlist"] = len(final)
+        (run_dir / "research_manifest.json").write_text(
+            json.dumps(research_manifest, indent=2), encoding="utf-8"
+        )
     except Exception as exc:
         log.exception("Research dataset enrichment failed; core pipeline output is retained: %s", exc)
         (run_dir / "research_enrichment_error.txt").write_text(str(exc), encoding="utf-8")
@@ -164,7 +170,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Run Phase 1 (scrape) only — no enrichment, no Excel export")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     args = parser.parse_args()
-    run(skip_phase1=args.skip_phase1, run_date=args.date, dry_run=args.dry_run)
+    run(skip_phase1=args.skip_phase1, run_date=args.run_date, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
