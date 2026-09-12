@@ -55,7 +55,6 @@ from .config import (
     HOLDING_FETCH_DELAY, HOLDING_RETRY_COUNT,
     HOLDING_WORKERS, USER_AGENT,
     TRADES_CSV_FILENAME,
-    # scoring weights
     SCORE_PROMO_BUY, SCORE_PROMO_MULTI_TXN, SCORE_PROMO_CONVICTION,
     SCORE_PROMO_HOLDING_INC, SCORE_PROMO_NO_SELL, SCORE_PROMO_NO_PLEDGE,
     SCORE_FUND_REV_GROWTH, SCORE_FUND_EBITDA_GROWTH, SCORE_FUND_PAT_GROWTH,
@@ -82,11 +81,7 @@ _SCREENER_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-# Bhavcopy series to include — EQ is main board, BE is trade-to-trade,
-# BZ is trade-to-trade (SME).  Including all three avoids N/A prices for
-# companies listed on SME exchange or under surveillance measures.
 _BHAVCOPY_SERIES = {"EQ", "BE", "BZ"}
-
 
 _TRANSACTION_CORE_COLUMNS = [
     "Symbol", "Name of Person", "CIN/DIN", "Type of Instrument",
@@ -135,7 +130,6 @@ def _deduplicate_transactions(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     return work.reset_index(drop=True), before - len(work)
 
 
-# ── Parsing helpers ───────────────────────────────────────────────────────────
 def _v(raw) -> float:
     return float(re.sub(r"[^\d.]", "", str(raw)) or 0)
 
@@ -164,13 +158,9 @@ def _build_aggregates(csv_path: Path) -> tuple[pd.DataFrame, set, set]:
     df_buys["_date"] = pd.to_datetime(df_buys["Date To"].str.strip(), format="%d-%m-%Y", errors="coerce")
     df_buys["_priced"] = (df_buys["_value"] > 0) & (df_buys["_qty"] > 0)
     agg = df_buys.groupby("Symbol").agg(
-        CompanyName=("Company Name", "first"), ValuePurchased=("_value", "sum"),
-        ReportedBuyQty=("_qty", "sum"), ReportedBuyTxn=("_value", "count"),
-        acqtoDt=("_date", "max"),
+        CompanyName=("Company Name", "first"), ValuePurchased=("_value", "sum"), ReportedBuyQty=("_qty", "sum"), ReportedBuyTxn=("_value", "count"), acqtoDt=("_date", "max"),
     ).reset_index()
-    priced = df_buys[df_buys["_priced"]].groupby("Symbol").agg(
-        TotalQty=("_qty", "sum"), NumBuyTxn=("_value", "count")
-    ).reset_index()
+    priced = df_buys[df_buys["_priced"]].groupby("Symbol").agg(TotalQty=("_qty", "sum"), NumBuyTxn=("_value", "count")).reset_index()
     priced_value = df_buys[df_buys["_priced"]].groupby("Symbol")["_value"].sum()
     agg["TotalQty"] = agg["Symbol"].map(priced.set_index("Symbol")["TotalQty"])
     agg["NumBuyTxn"] = agg["Symbol"].map(priced.set_index("Symbol")["NumBuyTxn"]).fillna(0).astype(int)
@@ -204,7 +194,6 @@ def _build_aggregates(csv_path: Path) -> tuple[pd.DataFrame, set, set]:
     return agg, pledge_syms, sell_syms
 
 
-# ── Price fetch — Bhavcopy daily CSV (no browser, no auth) ───────────────────
 _BHAVCOPY_BASE = "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_{date}_F_0000.csv.zip"
 _BHAVCOPY_HEADERS = {"User-Agent": USER_AGENT, "Accept": "*/*", "Referer": "https://www.nseindia.com/"}
 
@@ -240,18 +229,7 @@ def _download_bhavcopy(max_lookback: int = 5, as_of_date: date | None = None) ->
                     cmp = float(row["ClsPric"])
                 except (ValueError, KeyError):
                     cmp = None
-                def _bhav_num(*keys):
-                    for key in keys:
-                        raw = row.get(key)
-                        if raw not in (None, "", "-", "NA"):
-                            try:
-                                return float(raw)
-                            except (ValueError, TypeError):
-                                pass
-                    return None
-                prices[sym] = {
-                    "LastPrice": cmp,
-                }
+                prices[sym] = {"LastPrice": cmp}
             log.info("  Bhavcopy loaded for %s — %d symbols (EQ+BE+BZ)", d.strftime("%Y-%m-%d"), len(prices))
             return prices
         except Exception as exc:
@@ -267,7 +245,7 @@ _WEEK52_HEADERS = {"User-Agent": USER_AGENT, "Accept": "application/json, text/p
 
 def _parse_52_week_rows(text: str) -> dict[str, dict[str, float | None]]:
     lines = text.splitlines()
-    header_idx = next((i for i, line in enumerate(lines) if "Adjusted_52_Week_High" in line), None)
+    header_idx = next((i for i, line in enumerate(lines) if "Adjusted_52_Week_High" in line or "Adjusted 52_Week_High" in line), None)
     if header_idx is None:
         return {}
     rows = _csv.DictReader(lines[header_idx:])
@@ -276,7 +254,6 @@ def _parse_52_week_rows(text: str) -> dict[str, dict[str, float | None]]:
         sym = (row.get("SYMBOL") or row.get("Symbol") or row.get("TckrSymb") or "").strip()
         if not sym:
             continue
-
         def _report_num(*keys):
             for key in keys:
                 raw = row.get(key)
@@ -286,7 +263,6 @@ def _parse_52_week_rows(text: str) -> dict[str, dict[str, float | None]]:
                     except (ValueError, TypeError):
                         pass
             return None
-
         result[sym] = {
             "52WeekHigh": _report_num("Adjusted 52_Week_High", "Adjusted_52_Week_High"),
             "52WeekLow": _report_num("Adjusted 52_Week_Low", "Adjusted_52_Week_Low"),
@@ -295,38 +271,39 @@ def _parse_52_week_rows(text: str) -> dict[str, dict[str, float | None]]:
 
 
 def _download_52_week_report(max_lookback: int = 5, as_of_date: date | None = None) -> dict[str, dict[str, float | None]] | None:
-    """Download NSE's 52 Week High Low Report using NSE's report-discovery API."""
+    """Download NSE's 52 Week High Low Report using report discovery when available."""
     session = requests.Session()
     session.headers.update(_WEEK52_HEADERS)
     today = as_of_date or date.today()
 
-    # NSE's daily-reports API is the authoritative way to discover the current
-    # report URL. It avoids relying on a hardcoded archive path that NSE may move.
     try:
         api = session.get(_WEEK52_API, timeout=20)
         if api.status_code == 200:
             payload = api.json()
             candidates = payload.get("CurrentDay", []) + payload.get("PreviousDay", [])
             target_dates = {today.strftime("%d-%b-%Y")}
-            # On weekends/holidays the API may expose the latest trading day.
-            if as_of_date is None:
-                target_dates = {item.get("tradingDate") for item in candidates if item.get("tradingDate")}
             for item in candidates:
                 if item.get("fileKey") != "CM-52 WEEK-HIGH_LOW":
                     continue
-                if item.get("tradingDate") not in target_dates and as_of_date is not None:
+                trading_date = item.get("tradingDate")
+                if trading_date and trading_date not in target_dates:
                     continue
-                url = f"{item.get('filePath', '')}{item.get('fileActlName', '')}"
+                file_path = item.get("filePath") or ""
+                file_name = item.get("fileActlName") or ""
+                if not file_path or not file_name:
+                    continue
+                url = f"{file_path}{file_name}"
                 resp = session.get(url, timeout=20)
                 if resp.status_code == 200:
                     result = _parse_52_week_rows(resp.text)
                     if result:
-                        log.info("  NSE 52-week report loaded via API for %s — %d symbols", item.get("tradingDate"), len(result))
+                        log.info("  NSE 52-week report loaded via API for %s — %d symbols", trading_date, len(result))
                         return result
     except Exception as exc:
         log.warning("  NSE 52-week report API fetch failed: %s", exc)
 
-    # Historical fallback for dates where the API no longer exposes the report.
+    # Graceful archive fallback. Missing 52W data should never make the entire
+    # production scan unavailable; the validator handles this as a warning.
     attempted: list[str] = []
     for delta in range(max_lookback + 1):
         d = today - timedelta(days=delta)
@@ -371,7 +348,7 @@ _DMA_LOOKBACK = 380
 
 def _fetch_one_bhavcopy(args: tuple) -> dict[str, float] | None:
     date_str, url = args
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36", "Accept": "*/*", "Referer": "https://www.nseindia.com/"}
+    headers = {"User-Agent": USER_AGENT, "Accept": "*/*", "Referer": "https://www.nseindia.com/"}
     try:
         resp = requests.get(url, headers=headers, timeout=15)
         if resp.status_code != 200 or resp.content[:2] != b"PK":
@@ -394,6 +371,7 @@ def _fetch_one_bhavcopy(args: tuple) -> dict[str, float] | None:
         return prices
     except Exception:
         return None
+
 
 
 def _fetch_dma(symbols: list[str], lookback_days: int = _DMA_LOOKBACK, as_of_date: date | None = None) -> dict[str, dict]:
@@ -440,6 +418,7 @@ def _fetch_dma(symbols: list[str], lookback_days: int = _DMA_LOOKBACK, as_of_dat
 
 
 # ── Screener.in HTML parsers ───────────────────────────────────────────────────
+
 def _parse_holding_html(html: str) -> float | None:
     soup = BeautifulSoup(html, "html.parser")
     section = soup.find(id="shareholding")
@@ -553,7 +532,6 @@ def _parse_fundamentals_html(html: str) -> dict:
     return result
 
 
-# ── Worker combining holding + fundamentals in one HTTP session ───────────────
 def _screener_worker(syms_slice: list[str], wid: int, counter: list, lock: threading.Lock, total: int, log_every: int) -> dict[str, dict]:
     session = requests.Session()
     session.headers.update(_SCREENER_HEADERS)
@@ -614,7 +592,6 @@ def _fetch_holdings(symbols: list[str]) -> dict[str, float | None]:
     return {sym: data[sym]["holding"] for sym in symbols}
 
 
-# ── Scoring engine ────────────────────────────────────────────────────────────
 def _score_row(row: pd.Series, fund: dict) -> tuple[int, int, int, int, int, str]:
     promo_score = 0
     fund_score = 0
@@ -697,7 +674,6 @@ def _apply_scores(df: pd.DataFrame, screener_data: dict, dma_data: dict | None =
     return df
 
 
-# ── Promoter trades saver ─────────────────────────────────────────────────────
 def _save_promoter_trades(csv_path: Path, candidate_syms: set, out_path: Path) -> None:
     _TRADE_COLS = ["Symbol", "Company Name", "Name of Person", "CIN/DIN", "Category of Person", "Type of Instrument", "Securities Held Prior (No.)", "Securities Held Prior (%)", "Securities Acquired/Disposed (No.)", "Securities Acquired/Disposed (Value)", "Transaction Type", "Securities Held Post (No.)", "Securities Held Post (%)", "Date From", "Date To", "Mode of Acquisition/Disposal", "Broadcast Date/Time", "Details URL"]
     try:
@@ -712,25 +688,18 @@ def _save_promoter_trades(csv_path: Path, candidate_syms: set, out_path: Path) -
         log.warning("Could not save promoter trades: %s", exc)
 
 
-# ── Timing enrichment ─────────────────────────────────────────────────────────
 def _signal_stage(freshness: str, accumulation_stage: str, cmp_vs_avg_pct) -> str:
-    """Classify entry timing; descriptive only and independent of RYB score."""
     if cmp_vs_avg_pct is None or pd.isna(cmp_vs_avg_pct) or freshness == "No Signal":
         return "No Signal"
     premium = float(cmp_vs_avg_pct)
-    if freshness == "Stale":
-        return "Late — Poor Entry"
-    if accumulation_stage == "Early Accumulation" and premium <= 10:
-        return "Early Accumulation"
-    if freshness in {"Fresh", "Active"} and premium <= 10:
-        return "Confirmed Accumulation"
-    if premium <= 20:
-        return "Mature — Wait for Pullback"
+    if freshness == "Stale": return "Late — Poor Entry"
+    if accumulation_stage == "Early Accumulation" and premium <= 10: return "Early Accumulation"
+    if freshness in {"Fresh", "Active"} and premium <= 10: return "Confirmed Accumulation"
+    if premium <= 20: return "Mature — Wait for Pullback"
     return "Late — Poor Entry"
 
 
 def _apply_timing_metrics(df: pd.DataFrame, csv_path: Path, as_of_date: date | None) -> pd.DataFrame:
-    """Join promoter timing metrics to enriched rows without changing score/category."""
     snapshot = build_accumulation_snapshot(csv_path, as_of_date or date.today())
     timing_cols = [
         "Symbol", "FirstBuyDate", "LastBuyDate", "FirstBuyPrice", "LastBuyPrice",
@@ -741,8 +710,7 @@ def _apply_timing_metrics(df: pd.DataFrame, csv_path: Path, as_of_date: date | N
         "BuyAcceleration", "Freshness", "AccumulationStage",
     ]
     if snapshot.empty:
-        for col in timing_cols[1:]:
-            df[col] = None
+        for col in timing_cols[1:]: df[col] = None
         df["PromoterAvgPrice"] = df.get("AvgPrice")
         df["CMPvsPromoterAvgPct"] = None
         df["SignalStage"] = "No Signal"
@@ -762,7 +730,6 @@ def _apply_timing_metrics(df: pd.DataFrame, csv_path: Path, as_of_date: date | N
     return df
 
 
-# ── Phase 2 entry point ───────────────────────────────────────────────────────
 def run(csv_path: Path, full_csv_path: Path, as_of_date: date | None = None) -> pd.DataFrame:
     log.info("━" * 60)
     log.info("PHASE 2 — Filtering & enriching")
@@ -793,7 +760,6 @@ def run(csv_path: Path, full_csv_path: Path, as_of_date: date | None = None) -> 
     agg_clean["SixMonthReturn"] = agg_clean["Symbol"].map({s: dma_data[s]["SixMonthReturn"] for s in symbols})
     agg_clean["PriceDiffPct"] = ((agg_clean["LastPrice"] - agg_clean["AvgPrice"]) / agg_clean["AvgPrice"] * 100).round(1)
     agg_clean["AbsDiffPct"] = agg_clean["PriceDiffPct"].abs()
-    # Timing metrics are descriptive only.  They do not alter score/category.
     agg_clean = _apply_timing_metrics(agg_clean, csv_path, as_of_date)
     agg_clean = _apply_scores(agg_clean, screener_data, dma_data)
     full_csv_path.parent.mkdir(parents=True, exist_ok=True)
