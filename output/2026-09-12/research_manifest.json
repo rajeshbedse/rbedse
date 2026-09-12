@@ -9,14 +9,16 @@
     "promoter_cost_history": "promoter_cost_history.csv",
     "promoter_activity": "promoter_activity.csv",
     "promoter_holding_history": "promoter_holding_history.csv",
-    "company_classification": "company_classification.csv"
+    "company_classification": "company_classification.csv",
+    "ryb_scan": "ryb_scan.csv"
   },
   "counts": {
-    "symbols": 86,
-    "price_history_rows": 21116,
-    "promoter_activity_rows": 510,
-    "promoter_holding_history_rows": 692,
-    "company_classification_rows": 86,
-    "promoter_cost_history_rows": 21116
+    "symbols": 46,
+    "price_history_rows": 0,
+    "promoter_activity_rows": 216,
+    "promoter_holding_history_rows": 254,
+    "company_classification_rows": 46,
+    "promoter_cost_history_rows": 0,
+    "final_shortlist": 46
   }
 }
