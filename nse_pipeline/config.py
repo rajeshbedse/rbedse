@@ -5,7 +5,7 @@ from pathlib import Path
 
 # ── Analysis thresholds ───────────────────────────────────────────────────────
 MIN_PURCHASE_VALUE   = 2_000_000   # ₹ — minimum total promoter buy value per symbol
-MAX_SELL_BUY_RATIO_PCT = 25.0       # hard exclusion if promoter market sells exceed 25% of market buys
+MAX_SELL_BUY_RATIO_PCT = 25.0       # retained for v1 shadow reporting; v2 treats sells as risk
 MIN_PROMO_HOLDING    = 60.0         # % — minimum latest-quarter promoter shareholding
 PRICE_PROXIMITY_BANDS = [10, 20, 30]  # % bands for proximity report
 
@@ -30,43 +30,48 @@ FULL_CSV_FILENAME    = "enriched_full.csv"
 TRADES_CSV_FILENAME  = "promoter_trades.csv"
 LOG_FILENAME         = "run_log.txt"
 
-# ── Scoring model weights (max points per sub-bucket) ────────────────────────
-# Promoter Signal  — 25 pts
-SCORE_PROMO_BUY           = 5   # promoter market buy present
-SCORE_PROMO_MULTI_TXN     = 3   # ≥ 3 transactions
-SCORE_PROMO_CONVICTION    = 5   # buy value ≥ 0.25 % of market cap
-SCORE_PROMO_HOLDING_INC   = 5   # holding > 65 % (proxy for high-conviction ownership)
-SCORE_PROMO_NO_SELL       = 2   # no market sell in the period
-SCORE_PROMO_NO_PLEDGE     = 5   # no pledge creation / invocation
+# ── Legacy v1 scoring constants (shadow model) ────────────────────────────────
+# Kept unchanged so ScoreV1 remains exactly comparable with historical runs.
+SCORE_PROMO_BUY           = 5
+SCORE_PROMO_MULTI_TXN     = 3
+SCORE_PROMO_CONVICTION    = 5
+SCORE_PROMO_HOLDING_INC   = 5
+SCORE_PROMO_NO_SELL       = 2
+SCORE_PROMO_NO_PLEDGE     = 5
 
-# Fundamental Signal — 35 pts
-SCORE_FUND_REV_GROWTH     = 5   # revenue growth > 15 %
-SCORE_FUND_EBITDA_GROWTH  = 5   # EBITDA growth > 15 %
-SCORE_FUND_PAT_GROWTH     = 7   # PAT growth > 15 %
-SCORE_FUND_EPS_GROWTH     = 5   # EPS growth > 15 %
-SCORE_FUND_ROCE           = 4   # ROCE > 15 %
-SCORE_FUND_DE_RATIO       = 3   # D/E < 0.5
-SCORE_FUND_OCF_POS        = 6   # operating cash flow positive
+SCORE_FUND_REV_GROWTH     = 5
+SCORE_FUND_EBITDA_GROWTH  = 5
+SCORE_FUND_PAT_GROWTH     = 7
+SCORE_FUND_EPS_GROWTH     = 5
+SCORE_FUND_ROCE           = 4
+SCORE_FUND_DE_RATIO       = 3
+SCORE_FUND_OCF_POS        = 6
 
-# Technical Signal — 30 pts
-SCORE_TECH_ABOVE_REF      = 5   # price > promoter avg buy price
-SCORE_TECH_ABOVE_50DMA    = 5   # price > 50 DMA  (approximated from Screener)
-SCORE_TECH_ABOVE_200DMA   = 5   # price > 200 DMA (approximated from Screener)
-SCORE_TECH_DMA_CROSS      = 5   # 50 DMA > 200 DMA (golden cross proxy)
-SCORE_TECH_VOL_EXPANSION  = 5   # volume expansion signal from Screener
-SCORE_TECH_REL_STRENGTH   = 5   # relative strength vs Nifty (positive 6M return)
+SCORE_TECH_ABOVE_REF      = 5
+SCORE_TECH_ABOVE_50DMA    = 5
+SCORE_TECH_ABOVE_200DMA   = 5
+SCORE_TECH_DMA_CROSS      = 5
+SCORE_TECH_VOL_EXPANSION  = 5
+SCORE_TECH_REL_STRENGTH   = 5
 
-# Risk deductions — up to −10 pts (applied as negative)
-SCORE_RISK_PLEDGE         = -5  # promoter pledge > 0 %
-SCORE_RISK_MARGIN_FALL    = -2  # operating margin deteriorating
-SCORE_RISK_HIGH_PE        = -3  # PE > 60
+SCORE_RISK_PLEDGE         = -5
+SCORE_RISK_MARGIN_FALL    = -2
+SCORE_RISK_HIGH_PE        = -3
 
-# Category thresholds (score / 100)
-CATEGORY_STRONG_BUY    = 65    # 🟢  Strong Buy Setup
-CATEGORY_BUY_BREAKOUT  = 50    # 🟢  Buy on Breakout
-CATEGORY_WATCHLIST     = 40    # 🟡  Watchlist
-CATEGORY_WEAK_FUND     = 30    # 🟠  Fundamental but technically weak
-# < CATEGORY_WEAK_FUND   → 🔴  Avoid
+# ── Active v2 scoring model ──────────────────────────────────────────────────
+# Gross model: Promoter 30 + Fundamentals 30 + Technical 25 = 85.
+# Gross score is normalized to 100; risk can deduct up to 15 points.
+V2_PROMOTER_MAX           = 30
+V2_FUNDAMENTAL_MAX        = 30
+V2_TECHNICAL_MAX          = 25
+V2_RISK_MAX_DEDUCTION     = 15
+
+# ── Category thresholds (score / 100) ────────────────────────────────────────
+CATEGORY_STRONG_BUY    = 65
+CATEGORY_BUY_BREAKOUT  = 50
+CATEGORY_WATCHLIST     = 40
+CATEGORY_WEAK_FUND     = 30
+# < CATEGORY_WEAK_FUND → Avoid
 
 # ── Filter sets ───────────────────────────────────────────────────────────────
 PROMOTER_CATEGORIES  = {"promoter", "promoter group", "promoter and director"}
