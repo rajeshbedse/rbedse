@@ -13,12 +13,12 @@
     "ryb_scan": "ryb_scan.csv"
   },
   "counts": {
-    "symbols": 56,
-    "price_history_rows": 13572,
-    "promoter_activity_rows": 288,
-    "promoter_holding_history_rows": 379,
-    "company_classification_rows": 56,
-    "promoter_cost_history_rows": 13572,
-    "final_shortlist": 56
+    "symbols": 55,
+    "price_history_rows": 13316,
+    "promoter_activity_rows": 465,
+    "promoter_holding_history_rows": 364,
+    "company_classification_rows": 55,
+    "promoter_cost_history_rows": 13316,
+    "final_shortlist": 55
   }
 }
