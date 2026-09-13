@@ -24,6 +24,7 @@ from .config import (
 )
 from . import scraper, analyzer, reporter, research_enrichment
 from .research_enrichment import build_research_datasets
+from .promoter_windows import rebuild_promoter_activity_windows
 from .robust_fallbacks import install as install_robust_fallbacks
 
 _REPO_ROOT = Path(__file__).parent.parent
@@ -121,36 +122,21 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
         return run_dir
     analyzer._download_bhavcopy = _download_close_bhavcopy
     as_of = datetime.strptime(date_str, "%Y-%m-%d").date()
-
-    # Resilience layer: preserve the freshest available NSE 52-week values from
-    # the previous successful run and reuse Screener's classification hierarchy
-    # from the same fundamentals request instead of depending on a second NSE
-    # classification endpoint.
-    install_robust_fallbacks(
-        analyzer,
-        research_enrichment,
-        _OUTPUT_ROOT,
-        as_of,
-        ryb_scan_csv,
-    )
-
+    install_robust_fallbacks(analyzer, research_enrichment, _OUTPUT_ROOT, as_of, ryb_scan_csv)
     final = analyzer.run(csv_path, full_csv, as_of_date=as_of)
-
     final.to_csv(ryb_scan_csv, index=False, encoding="utf-8-sig")
     log.info("RYB canonical scan → %s (%d shortlisted symbols)", ryb_scan_csv, len(final))
-
     try:
         research_manifest = build_research_datasets(csv_path, ryb_scan_csv, run_dir, as_of_date=as_of)
+        activity_rows = rebuild_promoter_activity_windows(csv_path, final["Symbol"].astype(str).tolist(), as_of, run_dir / "promoter_activity.csv")
         research_manifest.setdefault("files", {})["ryb_scan"] = ryb_scan_csv.name
         research_manifest.setdefault("files", {})["enriched_full"] = full_csv.name
         research_manifest.setdefault("counts", {})["final_shortlist"] = len(final)
-        (run_dir / "research_manifest.json").write_text(
-            json.dumps(research_manifest, indent=2), encoding="utf-8"
-        )
+        research_manifest.setdefault("counts", {})["promoter_activity_rows"] = activity_rows
+        (run_dir / "research_manifest.json").write_text(json.dumps(research_manifest, indent=2), encoding="utf-8")
     except Exception as exc:
         log.exception("Research dataset enrichment failed; core pipeline output is retained: %s", exc)
         (run_dir / "research_enrichment_error.txt").write_text(str(exc), encoding="utf-8")
-
     reporter.run(final, excel_path)
     duration = round(time.monotonic() - pipeline_start)
     try:
