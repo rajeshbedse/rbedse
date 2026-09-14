@@ -18,27 +18,15 @@ from pathlib import Path
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 log = logging.getLogger(__name__)
-
 NSE_URL = "https://www.nseindia.com/companies-listing/corporate-filings-pledged-data"
 
 COLUMNS = [
-    "Symbol",
-    "Company Name",
-    "TotalIssuedShares",
-    "PromoterHoldingShares",
-    "PromoterHoldingPctTotal",
-    "PromoterEncumberedShares",
-    "PromoterEncumberedPctPromoter",
-    "PromoterEncumberedPctTotal",
-    "PromoterEncumberedValueCr",
-    "PromoterDisclosure",
-    "DepositoryPledgedShares",
-    "TotalDematShares",
-    "DepositoryPledgePctDemat",
-    "DepositoryPledgedValueCr",
-    "SourceURL",
-    "RetrievedAt",
-    "Status",
+    "Symbol", "Company Name", "TotalIssuedShares", "PromoterHoldingShares",
+    "PromoterHoldingPctTotal", "PromoterEncumberedShares",
+    "PromoterEncumberedPctPromoter", "PromoterEncumberedPctTotal",
+    "PromoterEncumberedValueCr", "PromoterDisclosure", "DepositoryPledgedShares",
+    "TotalDematShares", "DepositoryPledgePctDemat", "DepositoryPledgedValueCr",
+    "SourceURL", "RetrievedAt", "Status",
 ]
 
 
@@ -55,7 +43,7 @@ def _num(value: str | None) -> float | None:
 
 
 def _extract_rows(page) -> list[list[str]]:
-    """Find the Pledged Data table without depending on NSE's generated IDs."""
+    """Find the Pledged Data table without depending on generated NSE IDs."""
     return page.evaluate(
         """
         () => {
@@ -77,38 +65,29 @@ def _extract_rows(page) -> list[list[str]]:
 def _find_symbol_row(rows: list[list[str]], symbol: str) -> list[str] | None:
     target = symbol.strip().upper()
     for row in rows:
-        if not row:
-            continue
-        company = row[0].strip()
-        # NSE may render the symbol as a second line inside the company cell.
-        if target == company.upper() or target in company.upper().split():
+        if row and (target == row[0].strip().upper() or target in row[0].upper().split()):
             return row
+    # The NSE symbol query normally filters the table to the requested company.
+    # If the company cell contains the company name rather than the symbol,
+    # accept the sole data row rather than discarding valid filtered data.
+    if len(rows) == 1 and len(rows[0]) >= 10:
+        return rows[0]
     return None
 
 
 def _parse_row(row: list[str], symbol: str, source_url: str) -> dict:
-    # Current NSE Pledged Data table has 14 data columns. Positions are based
-    # on the published column order, not generated CSS classes/IDs.
+    # Current NSE Pledged Data table has 14 data columns. Positions follow the
+    # published table order and are intentionally independent of CSS classes.
     values = (row + [""] * 14)[:14]
-    retrieved = datetime.now(timezone.utc).isoformat()
     return {
-        "Symbol": symbol.upper(),
-        "Company Name": values[0],
-        "TotalIssuedShares": _num(values[1]),
-        "PromoterHoldingShares": _num(values[2]),
-        "PromoterHoldingPctTotal": _num(values[3]),
-        "PromoterEncumberedShares": _num(values[5]),
-        "PromoterEncumberedPctPromoter": _num(values[6]),
-        "PromoterEncumberedPctTotal": _num(values[7]),
-        "PromoterEncumberedValueCr": _num(values[8]),
-        "PromoterDisclosure": values[9],
-        "DepositoryPledgedShares": _num(values[10]),
-        "TotalDematShares": _num(values[11]),
-        "DepositoryPledgePctDemat": _num(values[12]),
-        "DepositoryPledgedValueCr": _num(values[13]),
-        "SourceURL": source_url,
-        "RetrievedAt": retrieved,
-        "Status": "OK",
+        "Symbol": symbol.upper(), "Company Name": values[0],
+        "TotalIssuedShares": _num(values[1]), "PromoterHoldingShares": _num(values[2]),
+        "PromoterHoldingPctTotal": _num(values[3]), "PromoterEncumberedShares": _num(values[5]),
+        "PromoterEncumberedPctPromoter": _num(values[6]), "PromoterEncumberedPctTotal": _num(values[7]),
+        "PromoterEncumberedValueCr": _num(values[8]), "PromoterDisclosure": values[9],
+        "DepositoryPledgedShares": _num(values[10]), "TotalDematShares": _num(values[11]),
+        "DepositoryPledgePctDemat": _num(values[12]), "DepositoryPledgedValueCr": _num(values[13]),
+        "SourceURL": source_url, "RetrievedAt": datetime.now(timezone.utc).isoformat(), "Status": "OK",
     }
 
 
@@ -135,22 +114,12 @@ def fetch_symbol(page, symbol: str) -> dict:
         row = _find_symbol_row(rows, symbol)
         if row:
             return _parse_row(row, symbol, url)
-        return {
-            "Symbol": symbol,
-            "Company Name": "",
-            "SourceURL": url,
-            "RetrievedAt": datetime.now(timezone.utc).isoformat(),
-            "Status": "NO_NSE_ROW",
-        }
+        return {"Symbol": symbol, "Company Name": "", "SourceURL": url,
+                "RetrievedAt": datetime.now(timezone.utc).isoformat(), "Status": "NO_NSE_ROW"}
     except Exception as exc:
         log.warning("Regulation 31 pledge fetch failed for %s: %s", symbol, exc)
-        return {
-            "Symbol": symbol,
-            "Company Name": "",
-            "SourceURL": url,
-            "RetrievedAt": datetime.now(timezone.utc).isoformat(),
-            "Status": f"ERROR: {type(exc).__name__}",
-        }
+        return {"Symbol": symbol, "Company Name": "", "SourceURL": url,
+                "RetrievedAt": datetime.now(timezone.utc).isoformat(), "Status": f"ERROR: {type(exc).__name__}"}
 
 
 def run(browser_context, symbols: list[str], out_path: Path) -> int:
@@ -160,18 +129,15 @@ def run(browser_context, symbols: list[str], out_path: Path) -> int:
     records = []
     try:
         for index, symbol in enumerate(wanted, start=1):
-            record = fetch_symbol(page, symbol)
-            records.append(record)
+            records.append(fetch_symbol(page, symbol))
             if index % 10 == 0 or index == len(wanted):
                 log.info("  Regulation 31 pledge data … %d/%d symbols", index, len(wanted))
     finally:
         page.close()
-
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", newline="", encoding="utf-8-sig") as handle:
         writer = csv.DictWriter(handle, fieldnames=COLUMNS, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(records)
+        writer.writeheader(); writer.writerows(records)
     ok = sum(1 for r in records if r.get("Status") == "OK")
     log.info("Regulation 31 pledge data → %s (%d/%d symbols with NSE rows)", out_path, ok, len(records))
     return len(records)
