@@ -11,12 +11,17 @@ from ..browser.stock_page import NSEStockPage
 
 log = logging.getLogger(__name__)
 
+# Keep the canonical Regulation 31 snapshot schema stable while changing only
+# the acquisition mechanism. Fields not exposed by the stock-page summary are
+# intentionally null rather than estimated from unrelated timestamps.
 COLUMNS = [
-    "Symbol", "Company Name", "PromoterHoldingPctTotal",
-    "PromoterEncumberedPctTotal", "PromoterEncumberedPctPromoter",
-    "PromoterEncumberedValueCr", "SourceURL", "RetrievedAt", "Status",
+    "Symbol", "Company Name", "TotalIssuedShares", "PromoterHoldingShares",
+    "PromoterHoldingPctTotal", "PromoterEncumberedShares",
+    "PromoterEncumberedPctPromoter", "PromoterEncumberedPctTotal",
+    "PromoterEncumberedValueCr", "PromoterDisclosure", "DepositoryPledgedShares",
+    "TotalDematShares", "DepositoryPledgePctDemat", "DepositoryPledgedValueCr",
+    "SourceURL", "RetrievedAt", "Status",
 ]
-
 
 _PERCENT = r"(?:\d+(?:\.\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?)"
 
@@ -56,12 +61,12 @@ def _parse_percentages(text: str) -> tuple[float | None, float | None, float | N
 
 
 def _parse_table_fallback(tables: list[list[list[str]]]) -> tuple[float | None, float | None, float | None]:
-    """Fallback for minor label/markup changes: use the first section row with 3+ percentages."""
+    """Fallback for minor label/markup changes: use a row containing the three percentages."""
     for table in tables:
         for row in table:
             joined = " | ".join(row)
             low = joined.lower()
-            if "promoter" not in low or "encumber" not in low and "pledged" not in low:
+            if "promoter" not in low or ("encumber" not in low and "pledged" not in low):
                 continue
             values = []
             for token in re.findall(_PERCENT + r"\s*%?", joined):
@@ -78,6 +83,7 @@ def fetch_symbol(stock_page: NSEStockPage, symbol: str) -> dict:
     symbol = symbol.strip().upper()
     retrieved = datetime.now(timezone.utc).isoformat()
     try:
+        stock_page.symbol = symbol
         stock_page.open()
         stock_page.navigate("promoter_encumbrance")
         stock_page.wait_for_heading("promoter_encumbrance")
@@ -92,23 +98,30 @@ def fetch_symbol(stock_page: NSEStockPage, symbol: str) -> dict:
 
         if promoter_total is None and enc_total is None and enc_promoter is None:
             return {
-                "Symbol": symbol,
-                "Company Name": "",
-                "SourceURL": stock_page.url,
-                "RetrievedAt": retrieved,
+                "Symbol": symbol, "Company Name": "",
+                "SourceURL": stock_page.url, "RetrievedAt": retrieved,
                 "Status": "NO_NSE_SECTION",
             }
 
-        # The stock quote section does not expose a separate current value field
-        # in the visible encumbrance summary. Keep it null rather than deriving a
-        # value from a potentially different closing-price timestamp.
+        # The visible stock-page summary provides percentages, but not a stable
+        # share-count/value pair. Do not derive a value from a different price
+        # timestamp; preserve the canonical fields as null until a same-section
+        # share-count source is confirmed.
         return {
             "Symbol": symbol,
             "Company Name": "",
+            "TotalIssuedShares": None,
+            "PromoterHoldingShares": None,
             "PromoterHoldingPctTotal": promoter_total,
-            "PromoterEncumberedPctTotal": enc_total,
+            "PromoterEncumberedShares": None,
             "PromoterEncumberedPctPromoter": enc_promoter,
+            "PromoterEncumberedPctTotal": enc_total,
             "PromoterEncumberedValueCr": None,
+            "PromoterDisclosure": "",
+            "DepositoryPledgedShares": None,
+            "TotalDematShares": None,
+            "DepositoryPledgePctDemat": None,
+            "DepositoryPledgedValueCr": None,
             "SourceURL": stock_page.url,
             "RetrievedAt": retrieved,
             "Status": "OK",
@@ -116,11 +129,8 @@ def fetch_symbol(stock_page: NSEStockPage, symbol: str) -> dict:
     except Exception as exc:
         log.warning("Promoter encumbrance fetch failed for %s: %s", symbol, exc)
         return {
-            "Symbol": symbol,
-            "Company Name": "",
-            "SourceURL": stock_page.url,
-            "RetrievedAt": retrieved,
-            "Status": f"ERROR: {type(exc).__name__}",
+            "Symbol": symbol, "Company Name": "", "SourceURL": stock_page.url,
+            "RetrievedAt": retrieved, "Status": f"ERROR: {type(exc).__name__}",
         }
 
 
@@ -131,7 +141,6 @@ def run(browser_context, symbols: list[str], out_path: Path) -> int:
     records = []
     try:
         for index, symbol in enumerate(wanted, start=1):
-            stock_page.symbol = symbol
             records.append(fetch_symbol(stock_page, symbol))
             if index % 10 == 0 or index == len(wanted):
                 log.info("  NSE promoter encumbrance … %d/%d symbols", index, len(wanted))
