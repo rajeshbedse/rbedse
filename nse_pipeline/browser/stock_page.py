@@ -29,7 +29,7 @@ NSE_STOCK_SECTIONS = {
 class NSEStockPage:
     page: object
     symbol: str
-    wait_ms: int = 2500
+    wait_ms: int = 1000
 
     def __post_init__(self) -> None:
         self.symbol = self.symbol.strip().upper()
@@ -39,7 +39,7 @@ class NSEStockPage:
         return NSE_STOCK_URL.format(symbol=quote(self.symbol))
 
     def open(self) -> None:
-        self.page.goto(self.url, wait_until="domcontentloaded", timeout=60_000)
+        self.page.goto(self.url, wait_until="domcontentloaded", timeout=20_000)
         self.page.wait_for_timeout(self.wait_ms)
 
     def navigate(self, section: str) -> None:
@@ -49,11 +49,13 @@ class NSEStockPage:
             raise KeyError(f"Unknown NSE stock section: {section}")
 
         label = config["navigation"]
-        # NSE occasionally renders duplicate responsive navigation elements.
-        # Prefer an exact visible match and fall back to the first text match.
         locator = self.page.get_by_text(label, exact=True)
         visible = None
-        for index in range(locator.count()):
+        try:
+            count = locator.count()
+        except Exception:
+            count = 0
+        for index in range(count):
             candidate = locator.nth(index)
             try:
                 if candidate.is_visible():
@@ -61,31 +63,32 @@ class NSEStockPage:
                     break
             except Exception:
                 continue
-        if visible is None:
+        if visible is None and count:
             visible = locator.first
 
-        try:
-            visible.scroll_into_view_if_needed()
-            visible.click(timeout=15_000)
-        except Exception as exc:
-            log.debug("NSE stock section click failed for %s/%s: %s", self.symbol, section, exc)
-            # Some NSE releases expose the section as an anchor/hash rather than
-            # a clickable tab. The content may already be present in the DOM.
+        if visible is not None:
+            try:
+                visible.scroll_into_view_if_needed()
+                visible.click(timeout=5_000)
+            except Exception as exc:
+                log.debug("NSE stock section click failed for %s/%s: %s", self.symbol, section, exc)
 
-        self.page.wait_for_timeout(800)
+        self.page.wait_for_timeout(200)
 
-    def wait_for_heading(self, section: str, timeout: int = 20_000) -> bool:
+    def wait_for_heading(self, section: str, timeout: int = 3_000) -> bool:
         config = NSE_STOCK_SECTIONS[section]
         heading = config["heading"]
         try:
-            # Playwright's sync API expects the page-function argument via the
-            # keyword `arg`. Passing it positionally is incompatible with the
-            # current Playwright signature and caused every stock to consume the
-            # full timeout before falling through with a TypeError.
+            found = self.page.get_by_text(heading, exact=True)
+            for index in range(found.count()):
+                try:
+                    if found.nth(index).is_visible():
+                        return True
+                except Exception:
+                    continue
+
             self.page.wait_for_function(
-                """
-                heading => (document.body.innerText || '').toLowerCase().includes(heading.toLowerCase())
-                """,
+                "heading => (document.body.innerText || '').toLowerCase().includes(heading.toLowerCase())",
                 arg=heading,
                 timeout=timeout,
             )
