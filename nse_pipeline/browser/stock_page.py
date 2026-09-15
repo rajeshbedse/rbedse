@@ -17,7 +17,7 @@ NSE_STOCK_SECTIONS = {
         "navigation": "Promoter Encumbrance Details",
         "heading": "Promoter Encumbrance Details",
         "type": "table",
-        "navigation_timeout_ms": 8_000,
+        "navigation_timeout_ms": 12_000,
     },
 }
 
@@ -26,7 +26,7 @@ NSE_STOCK_SECTIONS = {
 class NSEStockPage:
     page: object
     symbol: str
-    wait_ms: int = 1_000
+    wait_ms: int = 3_000
 
     def __post_init__(self) -> None:
         self.symbol = self.symbol.strip().upper()
@@ -37,8 +37,25 @@ class NSEStockPage:
 
     def open(self) -> None:
         # Render the real stock page. Do not replace this with an NSE API call.
-        self.page.goto(self.url, wait_until="domcontentloaded", timeout=15_000)
+        # Chromium is configured by the caller; the page itself must be allowed
+        # to render the dynamic More menu before section navigation begins.
+        self.page.goto(self.url, wait_until="commit", timeout=30_000)
         self.page.wait_for_timeout(self.wait_ms)
+
+    def _select_candidates(self, label: str):
+        """Return native <select> controls containing the requested option."""
+        result = []
+        for index in range(self.page.locator("select").count()):
+            select = self.page.locator("select").nth(index)
+            try:
+                if not select.is_visible():
+                    continue
+                options = select.locator("option").all_inner_texts()
+                if any(text.strip().casefold() == label.casefold() for text in options):
+                    result.append(select)
+            except Exception:
+                continue
+        return result
 
     def _navigation_candidates(self, label: str):
         """Return robust rendered-DOM locators for a stock-page option."""
@@ -53,15 +70,33 @@ class NSEStockPage:
         )
 
     def navigate(self, section: str) -> bool:
-        """Click and select a named stock-page section using rendered UI text."""
+        """Select a named stock-page section using the rendered UI.
+
+        NSE currently exposes stock-specific sections through a native More
+        <select>. We therefore inspect the rendered options and select the
+        requested option first. The direct button/link/text locators remain as
+        fallback support if NSE changes the control implementation later.
+        """
         config = NSE_STOCK_SECTIONS.get(section)
         if config is None:
             raise KeyError(f"Unknown NSE stock section: {section}")
 
         label = config["navigation"]
-        deadline = time.monotonic() + int(config.get("navigation_timeout_ms", 8_000)) / 1000
+        deadline = time.monotonic() + int(config.get("navigation_timeout_ms", 12_000)) / 1000
 
         while time.monotonic() < deadline:
+            # Primary path: the screenshot-confirmed NSE "More" native select.
+            for select in self._select_candidates(label):
+                try:
+                    select.scroll_into_view_if_needed(timeout=2_000)
+                    select.select_option(label=label)
+                    self.page.wait_for_timeout(800)
+                    log.info("NSE stock section selected from More menu: %s / %s", self.symbol, label)
+                    return True
+                except Exception as exc:
+                    log.debug("NSE More/select navigation failed for %s/%s: %s", self.symbol, label, exc)
+
+            # Fallback for a future/custom NSE menu implementation.
             for locator in self._navigation_candidates(label):
                 try:
                     count = locator.count()
@@ -74,17 +109,17 @@ class NSEStockPage:
                             continue
                         candidate.scroll_into_view_if_needed(timeout=2_000)
                         candidate.click(timeout=3_000)
-                        self.page.wait_for_timeout(300)
+                        self.page.wait_for_timeout(500)
                         log.info("NSE stock section selected: %s / %s", self.symbol, label)
                         return True
                     except Exception as exc:
                         log.debug("NSE section click failed for %s/%s: %s", self.symbol, label, exc)
-            self.page.wait_for_timeout(150)
+            self.page.wait_for_timeout(250)
 
         log.warning("NSE stock section navigation unavailable for %s: %s (url=%s)", self.symbol, label, self.page.url)
         return False
 
-    def wait_for_heading(self, section: str, timeout: int = 8_000) -> bool:
+    def wait_for_heading(self, section: str, timeout: int = 10_000) -> bool:
         """Wait for the rendered section heading."""
         heading = NSE_STOCK_SECTIONS[section]["heading"]
         deadline = time.monotonic() + timeout / 1000
