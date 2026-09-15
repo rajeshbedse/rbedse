@@ -78,11 +78,15 @@ class NSEStockPage:
         config = NSE_STOCK_SECTIONS[section]
         heading = config["heading"]
         try:
+            # Playwright's sync API expects the page-function argument via the
+            # keyword `arg`. Passing it positionally is incompatible with the
+            # current Playwright signature and caused every stock to consume the
+            # full timeout before falling through with a TypeError.
             self.page.wait_for_function(
                 """
                 heading => (document.body.innerText || '').toLowerCase().includes(heading.toLowerCase())
                 """,
-                heading,
+                arg=heading,
                 timeout=timeout,
             )
             return True
