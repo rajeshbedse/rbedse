@@ -14,12 +14,12 @@
     "regulation31_pledge": "regulation31_pledge.csv"
   },
   "counts": {
-    "symbols": 55,
-    "price_history_rows": 13316,
-    "promoter_activity_rows": 465,
-    "promoter_holding_history_rows": 367,
-    "company_classification_rows": 55,
-    "promoter_cost_history_rows": 13316,
-    "final_shortlist": 55
+    "symbols": 64,
+    "price_history_rows": 15604,
+    "promoter_activity_rows": 730,
+    "promoter_holding_history_rows": 541,
+    "company_classification_rows": 64,
+    "promoter_cost_history_rows": 15604,
+    "final_shortlist": 64
   }
 }
