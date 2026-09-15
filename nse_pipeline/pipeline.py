@@ -3,18 +3,14 @@ Main pipeline orchestrator — ties Phases 1, 2, 3 together.
 Called by the CLI entry point (run_pipeline) and by the scheduler.
 """
 import argparse
-import csv as _csv
-import io
 import json
 import logging
 import sys
 import time
-import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
-import requests
 from playwright.sync_api import sync_playwright
 
 from . import __version__
@@ -23,53 +19,13 @@ from .config import (
     TRADES_CSV_FILENAME, LOG_FILENAME, USER_AGENT, BROWSER_ARGS, NSE_FILING_PERIOD,
 )
 from . import scraper, analyzer, reporter, research_enrichment, regulation31
+from .nse_equity import fetch_current_prices, fetch_52_week_prices, fetch_dma
 from .research_enrichment import build_research_datasets
 from .promoter_windows import rebuild_promoter_activity_windows
 from .robust_fallbacks import install as install_robust_fallbacks
 
 _REPO_ROOT = Path(__file__).parent.parent
 _OUTPUT_ROOT = _REPO_ROOT / OUTPUT_ROOT
-
-
-def _download_close_bhavcopy(max_lookback: int = 5, as_of_date=None):
-    """Download NSE ClsPric using the same Bhavcopy lookup as the analyzer."""
-    base = "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_{date}_F_0000.csv.zip"
-    headers = {"User-Agent": USER_AGENT, "Accept": "*/*", "Referer": "https://www.nseindia.com/"}
-    session = requests.Session()
-    session.headers.update(headers)
-    today = as_of_date or datetime.now().date()
-    attempted = []
-    for delta in range(max_lookback + 1):
-        d = today - pd.Timedelta(days=delta)
-        if d.weekday() >= 5:
-            continue
-        ds = d.strftime("%Y%m%d")
-        attempted.append(ds)
-        try:
-            resp = session.get(base.format(date=ds), timeout=20)
-            if resp.status_code != 200 or resp.content[:2] != b"PK":
-                continue
-            z = zipfile.ZipFile(io.BytesIO(resp.content))
-            raw = z.read(z.namelist()[0]).decode("utf-8")
-            rows = _csv.DictReader(raw.splitlines())
-            prices = {}
-            for row in rows:
-                series = row.get("SctySrs", "").strip()
-                if series not in {"EQ", "BE", "BZ"}:
-                    continue
-                sym = row.get("TckrSymb", "").strip()
-                if sym in prices and series != "EQ":
-                    continue
-                try:
-                    prices[sym] = {"LastPrice": float(row["ClsPric"])}
-                except (ValueError, KeyError):
-                    prices[sym] = {"LastPrice": None}
-            logging.getLogger(__name__).info("  CMP prices loaded from NSE closing price for %s — %d symbols", d.strftime("%Y-%m-%d"), len(prices))
-            return prices
-        except Exception as exc:
-            logging.getLogger(__name__).warning("  NSE closing-price fetch failed for %s: %s", ds, exc)
-    logging.getLogger(__name__).warning("  NSE closing-price Bhavcopy: no file found for dates %s", attempted)
-    return None
 
 
 def _setup_logging(log_path: Path) -> None:
@@ -121,8 +77,16 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
         meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
         log.info("No NSE filings found for %s. Skipping enrichment.", date_str)
         return run_dir
-    analyzer._download_bhavcopy = _download_close_bhavcopy
+
     as_of = datetime.strptime(date_str, "%Y-%m-%d").date()
+
+    # Market/security data now comes from the official NSE equity report
+    # application and its backing API. This deliberately avoids the legacy
+    # nsearchives Bhavcopy domain for current prices, 52W data and DMA history.
+    analyzer._fetch_prices = lambda symbols, as_of_date=None: fetch_current_prices(symbols, as_of_date)
+    analyzer._fetch_52_week_prices = lambda symbols, as_of_date=None: fetch_52_week_prices(symbols, as_of_date)
+    analyzer._fetch_dma = lambda symbols, lookback_days=380, as_of_date=None: fetch_dma(symbols, lookback_days, as_of_date)
+
     install_robust_fallbacks(analyzer, research_enrichment, _OUTPUT_ROOT, as_of, ryb_scan_csv)
     final = analyzer.run(csv_path, full_csv, as_of_date=as_of)
     final.to_csv(ryb_scan_csv, index=False, encoding="utf-8-sig")
