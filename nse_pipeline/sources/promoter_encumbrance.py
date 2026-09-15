@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -103,10 +104,6 @@ def fetch_symbol(stock_page: NSEStockPage, symbol: str) -> dict:
                 "Status": "NO_NSE_SECTION",
             }
 
-        # The visible stock-page summary provides percentages, but not a stable
-        # share-count/value pair. Do not derive a value from a different price
-        # timestamp; preserve the canonical fields as null until a same-section
-        # share-count source is confirmed.
         return {
             "Symbol": symbol,
             "Company Name": "",
@@ -134,18 +131,40 @@ def fetch_symbol(stock_page: NSEStockPage, symbol: str) -> dict:
         }
 
 
-def run(browser_context, symbols: list[str], out_path: Path) -> int:
-    wanted = list(dict.fromkeys(str(s).strip().upper() for s in symbols if str(s).strip()))
-    page = browser_context.new_page()
-    stock_page = NSEStockPage(page, "")
-    records = []
+def _fetch_symbol(browser, symbol: str) -> dict:
+    context = browser.new_context()
+    page = context.new_page()
     try:
-        for index, symbol in enumerate(wanted, start=1):
-            records.append(fetch_symbol(stock_page, symbol))
-            if index % 10 == 0 or index == len(wanted):
-                log.info("  NSE promoter encumbrance … %d/%d symbols", index, len(wanted))
+        return fetch_symbol(NSEStockPage(page, symbol), symbol)
     finally:
         page.close()
+        context.close()
+
+
+def run(browser, symbols: list[str], out_path: Path) -> int:
+    wanted = list(dict.fromkeys(str(s).strip().upper() for s in symbols if str(s).strip()))
+    records: list[dict] = []
+    max_workers = min(4, max(1, len(wanted)))
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {pool.submit(_fetch_symbol, browser, symbol): symbol for symbol in wanted}
+        completed = 0
+        for future in as_completed(futures):
+            symbol = futures[future]
+            try:
+                records.append(future.result())
+            except Exception as exc:
+                log.warning("Promoter encumbrance worker failed for %s: %s", symbol, exc)
+                records.append({
+                    "Symbol": symbol, "Company Name": "", "SourceURL": "",
+                    "RetrievedAt": datetime.now(timezone.utc).isoformat(),
+                    "Status": f"ERROR: {type(exc).__name__}",
+                })
+            completed += 1
+            if completed % 10 == 0 or completed == len(wanted):
+                log.info("  NSE promoter encumbrance … %d/%d symbols", completed, len(wanted))
+
+    order = {symbol: index for index, symbol in enumerate(wanted)}
+    records.sort(key=lambda row: order.get(str(row.get("Symbol", "")).upper(), len(order)))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", newline="", encoding="utf-8-sig") as handle:
