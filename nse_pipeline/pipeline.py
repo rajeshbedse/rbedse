@@ -131,12 +131,11 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=False, args=BROWSER_ARGS)
-            ctx = browser.new_context(user_agent=USER_AGENT)
-            regulation31_rows = regulation31.run(ctx, final["Symbol"].astype(str).tolist(), pledge_csv)
+            regulation31_rows = regulation31.run(browser, final["Symbol"].astype(str).tolist(), pledge_csv)
             browser.close()
-        log.info("Regulation 31 canonical pledge snapshot → %s (%d symbols)", pledge_csv, regulation31_rows)
+        log.info("Regulation 31 rendered stock-page pledge snapshot → %s (%d symbols)", pledge_csv, regulation31_rows)
     except Exception as exc:
-        log.exception("Regulation 31 pledge enrichment failed; retaining core scan output: %s", exc)
+        log.exception("Regulation 31 rendered stock-page enrichment failed; retaining core scan output: %s", exc)
         pledge_csv.write_text("Symbol,Status\n", encoding="utf-8")
 
     try:
