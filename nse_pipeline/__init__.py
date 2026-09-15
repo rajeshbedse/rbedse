@@ -1,5 +1,5 @@
 """NSE Insider Trading pipeline package."""
-__version__ = "1.3.3"
+__version__ = "1.3.4"
 
 # Install resilience/scoring extensions as soon as the package loads.
 # This keeps the scheduled pipeline behavior centralized while allowing the
