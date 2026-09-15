@@ -19,7 +19,9 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 log = logging.getLogger(__name__)
 
-NSE_STOCK_URL = "https://www.nseindia.com/get-quote/equity/{symbol}"
+# NSE's current rendered equity quote route is the query-string form below.
+# Keep this as the canonical stock-page entry point for all rendered sections.
+NSE_STOCK_URL = "https://www.nseindia.com/get-quotes/equity?symbol={symbol}"
 
 NSE_STOCK_SECTIONS = {
     "promoter_encumbrance": {
