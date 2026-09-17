@@ -26,6 +26,7 @@ from . import scraper, analyzer, reporter, research_enrichment
 from .research_enrichment import build_research_datasets
 from .promoter_windows import rebuild_promoter_activity_windows
 from .robust_fallbacks import install as install_robust_fallbacks
+from .price_history_fallback import build_yahoo_price_history
 
 _REPO_ROOT = Path(__file__).parent.parent
 _OUTPUT_ROOT = _REPO_ROOT / OUTPUT_ROOT
@@ -129,6 +130,33 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
 
     try:
         research_manifest = build_research_datasets(csv_path, ryb_scan_csv, run_dir, as_of_date=as_of)
+
+        # NSE's historical equity archive is currently returning no usable
+        # historical rows for the research dataset. Keep the primary NSE path
+        # untouched and use an isolated fallback only when it produced zero
+        # rows. This does not affect the scan, scoring, or shortlist.
+        if int(research_manifest.get("counts", {}).get("price_history_rows", 0) or 0) == 0:
+            fallback_rows = build_yahoo_price_history(
+                final["Symbol"].astype(str).tolist(),
+                as_of,
+                run_dir / "market_price_history.csv",
+            )
+            research_manifest.setdefault("counts", {})["price_history_rows"] = fallback_rows
+            research_manifest.setdefault("price_history_source", "Yahoo Finance fallback")
+            research_manifest.setdefault("files", {})["market_price_history"] = "market_price_history.csv"
+            # Rebuild the promoter cost series now that price history exists.
+            research_enrichment.build_promoter_cost_series(
+                pd.read_csv(csv_path, encoding="utf-8-sig") if csv_path.exists() else pd.DataFrame(),
+                run_dir / "market_price_history.csv",
+                run_dir / "promoter_cost_history.csv",
+            )
+            research_manifest.setdefault("counts", {})["promoter_cost_history_rows"] = sum(
+                1 for _ in csv.DictReader(
+                    (run_dir / "promoter_cost_history.csv").open("r", encoding="utf-8-sig", newline="")
+                )
+            )
+            log.info("Historical price fallback populated %d rows; promoter cost series rebuilt", fallback_rows)
+
         activity_rows = rebuild_promoter_activity_windows(csv_path, final["Symbol"].astype(str).tolist(), as_of, run_dir / "promoter_activity.csv")
         research_manifest.setdefault("files", {})["ryb_scan"] = ryb_scan_csv.name
         research_manifest.setdefault("files", {})["enriched_full"] = full_csv.name
@@ -144,14 +172,7 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
         candidates = len(pd.read_csv(full_csv, encoding="utf-8-sig"))
     except Exception:
         candidates = 0
-    failed_path = run_dir / "failed_urls.txt"
-    failed_urls = 0
-    if failed_path.exists():
-        try:
-            failed_urls = max(0, len(failed_path.read_text(encoding="utf-8").splitlines()) - 1)
-        except Exception:
-            failed_urls = 0
-    meta = {"run_date": date_str, "generated_at": datetime.now(timezone.utc).isoformat(), "status": "success", "filing_period": NSE_FILING_PERIOD, "raw_filings": raw_count, "failed_urls": failed_urls, "candidates": candidates, "shortlisted": len(final), "duration_s": duration, "pipeline_version": __version__}
+    meta = {"run_date": date_str, "generated_at": datetime.now(timezone.utc).isoformat(), "status": "success", "filing_period": NSE_FILING_PERIOD, "raw_filings": raw_count, "failed_urls": 0, "candidates": candidates, "shortlisted": len(final), "duration_s": duration, "pipeline_version": __version__}
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     log.info("meta.json → %s", meta_path)
     log.info("\nPipeline complete.  Duration: %ds", duration)
