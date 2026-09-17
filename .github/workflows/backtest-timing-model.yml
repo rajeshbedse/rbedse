@@ -1,0 +1,43 @@
+name: Backtest Promoter Timing Model
+
+on:
+  workflow_dispatch:
+    inputs:
+      horizons:
+        description: "Forward scan horizons to evaluate"
+        required: false
+        default: "5,10,20"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  timing-backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install analysis dependencies
+        run: python -m pip install --upgrade pip pandas
+
+      - name: Run 30D vs prior-60D shadow backtest
+        run: |
+          python scripts/backtest_timing_model.py \
+            --horizons "${{ inputs.horizons }}" \
+            --out-dir output/backtest/timing
+
+      - name: Upload backtest report
+        uses: actions/upload-artifact@v4
+        with:
+          name: promoter-timing-backtest-${{ github.run_id }}
+          path: output/backtest/timing/
+          if-no-files-found: error
+          retention-days: 30
