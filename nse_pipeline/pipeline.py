@@ -22,7 +22,7 @@ from .config import (
     OUTPUT_ROOT, CSV_FILENAME, EXCEL_FILENAME, FULL_CSV_FILENAME,
     TRADES_CSV_FILENAME, LOG_FILENAME, USER_AGENT, BROWSER_ARGS, NSE_FILING_PERIOD,
 )
-from . import scraper, analyzer, reporter, research_enrichment, regulation31
+from . import scraper, analyzer, reporter, research_enrichment
 from .research_enrichment import build_research_datasets
 from .promoter_windows import rebuild_promoter_activity_windows
 from .robust_fallbacks import install as install_robust_fallbacks
@@ -85,7 +85,6 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     excel_path = run_dir / EXCEL_FILENAME
     full_csv = run_dir / FULL_CSV_FILENAME
     ryb_scan_csv = run_dir / "ryb_scan.csv"
-    pledge_csv = run_dir / "regulation31_pledge.csv"
     log_path = run_dir / LOG_FILENAME
     meta_path = run_dir / "meta.json"
     pipeline_start = time.monotonic()
@@ -129,21 +128,10 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     log.info("RYB canonical scan → %s (%d shortlisted symbols)", ryb_scan_csv, len(final))
 
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False, args=BROWSER_ARGS)
-            regulation31_rows = regulation31.run(browser, final["Symbol"].astype(str).tolist(), pledge_csv)
-            browser.close()
-        log.info("Regulation 31 rendered stock-page pledge snapshot → %s (%d symbols)", pledge_csv, regulation31_rows)
-    except Exception as exc:
-        log.exception("Regulation 31 rendered stock-page enrichment failed; retaining core scan output: %s", exc)
-        pledge_csv.write_text("Symbol,Status\n", encoding="utf-8")
-
-    try:
         research_manifest = build_research_datasets(csv_path, ryb_scan_csv, run_dir, as_of_date=as_of)
         activity_rows = rebuild_promoter_activity_windows(csv_path, final["Symbol"].astype(str).tolist(), as_of, run_dir / "promoter_activity.csv")
         research_manifest.setdefault("files", {})["ryb_scan"] = ryb_scan_csv.name
         research_manifest.setdefault("files", {})["enriched_full"] = full_csv.name
-        research_manifest.setdefault("files", {})["regulation31_pledge"] = pledge_csv.name
         research_manifest.setdefault("counts", {})["final_shortlist"] = len(final)
         research_manifest.setdefault("counts", {})["promoter_activity_rows"] = activity_rows
         (run_dir / "research_manifest.json").write_text(json.dumps(research_manifest, indent=2), encoding="utf-8")
