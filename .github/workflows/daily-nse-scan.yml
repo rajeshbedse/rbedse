@@ -22,7 +22,7 @@ jobs:
   generate-data:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Checkout production branch
         uses: actions/checkout@v4
@@ -106,6 +106,19 @@ jobs:
           rm -rf /tmp/RYB
           git clone --depth 1 "https://x-access-token:${RYB_REPO_TOKEN}@github.com/rajeshbedse/RYB.git" /tmp/RYB
           cd /tmp/RYB
+
+          # Regulation 31 is an enrichment stage, not part of the core NSE scan.
+          # Existing reference rows are migrated to PledgeDataDate=2026-06-30;
+          # only genuinely new symbols are opened in NSE. Capture failures never
+          # overwrite a last-known-good row and do not fail the core scan.
+          set +e
+          xvfb-run -a python scripts/capture_regulation31.py \
+            --universe "${GITHUB_WORKSPACE}/output/${RUN_DATE}/enriched_full.csv" \
+            --reference data/reference/regulation31_pledge.csv
+          REG31_STATUS=$?
+          set -e
+          echo "Regulation 31 enrichment exit code: ${REG31_STATUS}"
+
           python scripts/build_snapshot.py "${GITHUB_WORKSPACE}/output/${RUN_DATE}"
           python scripts/augment_risk.py "${GITHUB_WORKSPACE}/output/${RUN_DATE}" data
           python scripts/validate_snapshot.py
