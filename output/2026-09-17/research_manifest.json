@@ -10,14 +10,13 @@
     "promoter_activity": "promoter_activity.csv",
     "promoter_holding_history": "promoter_holding_history.csv",
     "company_classification": "company_classification.csv",
-    "ryb_scan": "ryb_scan.csv",
-    "regulation31_pledge": "regulation31_pledge.csv"
+    "ryb_scan": "ryb_scan.csv"
   },
   "counts": {
     "symbols": 54,
     "price_history_rows": 13036,
     "promoter_activity_rows": 470,
-    "promoter_holding_history_rows": 376,
+    "promoter_holding_history_rows": 377,
     "company_classification_rows": 54,
     "promoter_cost_history_rows": 13036,
     "final_shortlist": 54
