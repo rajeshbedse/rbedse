@@ -103,9 +103,16 @@ jobs:
             echo "Snapshot is not publishable (${STATUS}); skipping RYB publish."
             exit 0
           fi
-          rm -rf /tmp/RYB
+          rm -rf /tmp/RYB /tmp/RYB_HISTORY_BACKUP
           git clone --depth 1 "https://x-access-token:${RYB_REPO_TOKEN}@github.com/rajeshbedse/RYB.git" /tmp/RYB
           cd /tmp/RYB
+
+          # Preserve the last known-good historical chart data before the
+          # current snapshot is rebuilt. A transient NSE/Yahoo history outage
+          # must never replace populated price/cost history with empty arrays.
+          if [ -d data/history ]; then
+            cp -a data/history /tmp/RYB_HISTORY_BACKUP
+          fi
 
           # Regulation 31 is an enrichment stage, not part of the core NSE scan.
           # Existing reference rows are migrated to PledgeDataDate=2026-06-30;
@@ -120,6 +127,65 @@ jobs:
           echo "Regulation 31 enrichment exit code: ${REG31_STATUS}"
 
           python scripts/build_snapshot.py "${GITHUB_WORKSPACE}/output/${RUN_DATE}"
+
+          # Merge historical chart series with the previous published snapshot.
+          # Current rows win for duplicate dates; previous rows fill gaps. This
+          # handles both a total outage (new series empty) and a partial outage
+          # without discarding valid historical research data.
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          current_root = Path("data/history")
+          previous_root = Path("/tmp/RYB_HISTORY_BACKUP")
+          if not previous_root.exists():
+              print("No previous RYB history backup available; keeping generated history.")
+              raise SystemExit(0)
+
+          def merge_by_date(previous, current):
+              merged = {}
+              for row in previous or []:
+                  if isinstance(row, dict) and row.get("date"):
+                      merged[str(row["date"])] = row
+              for row in current or []:
+                  if isinstance(row, dict) and row.get("date"):
+                      merged[str(row["date"])] = row
+              return [merged[key] for key in sorted(merged)]
+
+          merged_symbols = 0
+          restored_price = 0
+          restored_cost = 0
+          for current_file in current_root.glob("*.json"):
+              previous_file = previous_root / current_file.name
+              if not previous_file.exists():
+                  continue
+              try:
+                  current = json.loads(current_file.read_text(encoding="utf-8"))
+                  previous = json.loads(previous_file.read_text(encoding="utf-8"))
+              except (OSError, json.JSONDecodeError):
+                  continue
+              current_history = current.get("history") or {}
+              previous_history = previous.get("history") or {}
+              old_price = previous_history.get("price") or []
+              old_cost = previous_history.get("promoter_cost") or []
+              new_price = current_history.get("price") or []
+              new_cost = current_history.get("promoter_cost") or []
+              merged_price = merge_by_date(old_price, new_price)
+              merged_cost = merge_by_date(old_cost, new_cost)
+              if len(merged_price) > len(new_price):
+                  restored_price += 1
+              if len(merged_cost) > len(new_cost):
+                  restored_cost += 1
+              if merged_price != new_price or merged_cost != new_cost:
+                  current_history["price"] = merged_price
+                  current_history["promoter_cost"] = merged_cost
+                  current["history"] = current_history
+                  current_file.write_text(json.dumps(current, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
+                  merged_symbols += 1
+
+          print(f"Historical series protected: {merged_symbols} symbols; price restored/filled for {restored_price}, promoter cost for {restored_cost}.")
+          PY
+
           python scripts/augment_risk.py "${GITHUB_WORKSPACE}/output/${RUN_DATE}" data
           python scripts/validate_snapshot.py
           test -s data/snapshot.json
