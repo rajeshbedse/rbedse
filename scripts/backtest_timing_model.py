@@ -104,24 +104,30 @@ def derive_features(history: pd.DataFrame) -> pd.DataFrame:
     df["Current30BuyTxn"] = _num(df, "BuyTxn30D")
     df["Prior60BuyTxn"] = (_num(df, "BuyTxn90D") - _num(df, "BuyTxn30D")).clip(lower=0)
 
+    # Keep these calculations as ordinary float Series. Using pd.NA here
+    # creates pandas' nullable object dtype, for which Series.round() can
+    # raise TypeError under current pandas versions.
     market_cap = _num(df, "MarketCapCr")
-    df["Current30BuyPctMcap"] = (df["Current30BuyCr"] / market_cap.replace(0, pd.NA) * 100).round(4)
-    df["Prior60BuyPctMcap"] = (df["Prior60BuyCr"] / market_cap.replace(0, pd.NA) * 100).round(4)
+    safe_market_cap = market_cap.where(market_cap != 0)
+    df["Current30BuyPctMcap"] = (df["Current30BuyCr"] / safe_market_cap * 100).round(4)
+    df["Prior60BuyPctMcap"] = (df["Prior60BuyCr"] / safe_market_cap * 100).round(4)
 
     # A positive value means promoter buying is stronger in the current 30D
     # window than in the preceding 60D. This is deliberately not a score.
     prior = df["Prior60NetBuyCr"]
+    safe_prior = prior.where(prior > 0)
     df["CurrentVsPriorNetBuyRatio"] = (
-        df["Current30NetBuyCr"] / prior.where(prior > 0)
-    ).replace([float("inf"), -float("inf")], pd.NA).round(3)
+        df["Current30NetBuyCr"] / safe_prior
+    ).replace([float("inf"), -float("inf")], float("nan")).round(3)
     df["CurrentVsPriorNetBuyDeltaCr"] = (
         df["Current30NetBuyCr"] - df["Prior60NetBuyCr"]
     ).round(3)
 
     first_price = _num(df, "FirstBuyPrice")
     last_price = _num(df, "LastPrice")
+    safe_first_price = first_price.where(first_price != 0)
     df["PriceSinceFirstBuyPct"] = (
-        (last_price / first_price.replace(0, pd.NA) - 1) * 100
+        (last_price / safe_first_price - 1) * 100
     ).round(2)
 
     first_buy_date = pd.to_datetime(df.get("FirstBuyDate"), errors="coerce", dayfirst=True)
