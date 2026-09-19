@@ -123,6 +123,30 @@ def derive_features(history: pd.DataFrame) -> pd.DataFrame:
         df["Current30NetBuyCr"] - df["Prior60NetBuyCr"]
     ).round(3)
 
+    # Shadow 15-point historical-behaviour component. This is deliberately
+    # NOT wired into production scoring yet.
+    df["TimingScore15"] = (
+        (df["Current30NetBuyCr"] > 0).astype(int) * 5
+        + (df["CurrentVsPriorNetBuyDeltaCr"] > 0).astype(int) * 4
+        + (df["Prior60NetBuyCr"] > 0).astype(int) * 3
+        + ((_num(df, "UniquePromotersBuying") > 0) &
+           (_num(df, "UniquePromotersSelling") == 0)).astype(int) * 3
+    )
+    df["TimingScoreBand"] = pd.cut(
+        df["TimingScore15"],
+        bins=[-1, 3, 7, 11, 15],
+        labels=["Weak", "Developing", "Confirmed", "Strong"],
+    ).astype(str)
+    df["PromoterBehaviourSignal"] = "No Net Flow"
+    df.loc[df["Current30NetBuyCr"] < 0, "PromoterBehaviourSignal"] = "Current Net Selling"
+    df.loc[(df["Current30NetBuyCr"] > 0) & (df["Prior60NetBuyCr"] <= 0), "PromoterBehaviourSignal"] = "New Accumulation"
+    df.loc[(df["Current30NetBuyCr"] > 0) & (df["Prior60NetBuyCr"] > 0) &
+           (df["Current30NetBuyCr"] > df["Prior60NetBuyCr"]), "PromoterBehaviourSignal"] = "Accelerating Accumulation"
+    df.loc[(df["Current30NetBuyCr"] > 0) & (df["Prior60NetBuyCr"] > 0) &
+           (df["Current30NetBuyCr"] < df["Prior60NetBuyCr"]), "PromoterBehaviourSignal"] = "Slowing Accumulation"
+    df.loc[(df["Current30NetBuyCr"] > 0) & (df["Prior60NetBuyCr"] > 0) &
+           (df["Current30NetBuyCr"] == df["Prior60NetBuyCr"]), "PromoterBehaviourSignal"] = "Continuing Accumulation"
+
     first_price = _num(df, "FirstBuyPrice")
     last_price = _num(df, "LastPrice")
     safe_first_price = first_price.where(first_price != 0)
