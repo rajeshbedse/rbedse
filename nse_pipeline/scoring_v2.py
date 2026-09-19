@@ -125,15 +125,22 @@ def _risk_v2(symbol: str, row: pd.Series, fund: dict) -> int:
     risk = _RISK.get(symbol, {})
     pledge_ratio = _num(risk.get("PledgeBuyRatioPct"))
     sell_ratio = _num(row.get("SellBuyRatioPct"))
+    net_buy_value = _num(row.get("NetBuyValue"))
 
-    # Risk is magnitude-based, not an eligibility filter.
+    # Risk is magnitude-based, but net promoter selling is materially
+    # different from a small offsetting sale. A gross-buy signal must not
+    # remain strongly positive when promoter-group flow is net negative.
     if pledge_ratio <= 0: pledge = 0
     elif pledge_ratio <= 5: pledge = -2
     elif pledge_ratio <= 15: pledge = -4
     elif pledge_ratio <= 30: pledge = -6
     else: pledge = -8
 
-    if sell_ratio <= 0: sell = 0
+    if net_buy_value < 0 and sell_ratio >= 100:
+        sell = -10
+    elif net_buy_value < 0:
+        sell = -7
+    elif sell_ratio <= 0: sell = 0
     elif sell_ratio <= 5: sell = -1
     elif sell_ratio <= 15: sell = -2
     elif sell_ratio <= 30: sell = -4
