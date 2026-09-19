@@ -762,6 +762,8 @@ def _apply_timing_metrics(df: pd.DataFrame, csv_path: Path, as_of_date: date | N
         "WeightedAvgBuyPrice", "AccumulationDays", "DaysSinceFirstBuy", "DaysSinceLastBuy",
         "BuyTxn7D", "BuyTxn15D", "BuyTxn30D", "BuyTxn60D", "BuyTxn90D",
         "BuyValue7D", "BuyValue15D", "BuyValue30D", "BuyValue60D", "BuyValue90D",
+        "SellTxn7D", "SellTxn15D", "SellTxn30D", "SellTxn60D", "SellTxn90D",
+        "SellValue7D", "SellValue15D", "SellValue30D", "SellValue60D", "SellValue90D",
         "NetBuyValue7D", "NetBuyValue30D", "UniquePromotersBuying", "UniquePromotersSelling",
         "BuyAcceleration", "Freshness", "AccumulationStage",
     ]
