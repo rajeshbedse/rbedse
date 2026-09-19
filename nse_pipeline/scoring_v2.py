@@ -44,12 +44,15 @@ def _band(value: float, bands: list[tuple[float, int]]) -> int:
 
 def _promoter_v2(row: pd.Series, fund: dict) -> int:
     market_cap = _num(fund.get("MarketCapCr"))
-    buy_value_cr = _num(row.get("ValueCr"))
+    # Economic commitment is based on net promoter-group buying. Gross buys
+    # remain available for disclosure/audit but must not inflate conviction
+    # when promoter selling offsets them.
+    net_buy_value_cr = max(0.0, _num(row.get("NetBuyValue")) / 1e7)
     last_price = _num(row.get("LastPrice"))
     holding = _num(row.get("PromoHolding"))
 
-    # 1) Economic commitment: buy value relative to company market value.
-    buy_mcap_pct = (buy_value_cr / market_cap * 100.0) if market_cap > 0 else 0.0
+    # 1) Economic commitment: net buy value relative to company market value.
+    buy_mcap_pct = (net_buy_value_cr / market_cap * 100.0) if market_cap > 0 else 0.0
     intensity = _band(buy_mcap_pct, [
         (0.10, 2), (0.25, 4), (0.50, 6), (1.00, 8), (2.00, 10),
     ])
@@ -58,7 +61,7 @@ def _promoter_v2(row: pd.Series, fund: dict) -> int:
     # Market cap / CMP implies shares outstanding. This is explicitly an
     # estimate; the raw transaction quantity is authoritative, but shares
     # outstanding are not currently supplied by the Screener parser.
-    qty = _num(row.get("TotalQty"))
+    qty = max(0.0, _num(row.get("NetBuyQty")))
     implied_shares = (market_cap * 1e7 / last_price) if market_cap > 0 and last_price > 0 else 0.0
     stake_add_pct = (qty / implied_shares * 100.0) if implied_shares > 0 else 0.0
     exposure_increase_pct = (stake_add_pct / holding * 100.0) if holding > 0 else 0.0
@@ -66,9 +69,10 @@ def _promoter_v2(row: pd.Series, fund: dict) -> int:
         (0.50, 2), (1.00, 4), (2.00, 6), (5.00, 8),
     ])
 
-    # 3) Persistence across the five rolling windows.
+    # 3) Persistence across the five rolling windows. A window counts
+    # only when there is net buying, not merely gross purchase activity.
     windows = [
-        _num(row.get(f"BuyValue{days}D")) > 0
+        _num(row.get(f"NetBuyValue{days}D")) > 0
         for days in (7, 15, 30, 60, 90)
     ]
     active_windows = sum(windows)
@@ -227,8 +231,8 @@ def install(analyzer_module) -> None:
         shadow_cols = {
             "ScorePromoV1": [], "ScoreFundV1": [], "ScoreTechV1": [],
             "ScoreRiskV1": [], "ScoreV1": [], "CategoryV1": [],
-            "BuyMarketCapPct": [], "PromoterStakeAdditionPct": [],
-            "PromoterOwnershipIncreasePct": [],
+            "BuyMarketCapPct": [], "NetBuyMarketCapPct": [],
+            "PromoterStakeAdditionPct": [], "PromoterOwnershipIncreasePct": [],
         }
         for _, row in result.iterrows():
             symbol = str(row["Symbol"])
@@ -241,14 +245,16 @@ def install(analyzer_module) -> None:
             shadow_cols["CategoryV1"].append(old[5])
             mc = _num(row.get("MarketCapCr"))
             buy_cr = _num(row.get("ValueCr"))
+            net_buy_cr = max(0.0, _num(row.get("NetBuyValue")) / 1e7)
             cmp = _num(row.get("LastPrice"))
-            qty = _num(row.get("TotalQty"))
+            qty = max(0.0, _num(row.get("NetBuyQty")))
             holding = _num(row.get("PromoHolding"))
             buy_pct = buy_cr / mc * 100 if mc > 0 else 0.0
             shares = mc * 1e7 / cmp if mc > 0 and cmp > 0 else 0.0
             stake_pct = qty / shares * 100 if shares > 0 else 0.0
             exposure_pct = stake_pct / holding * 100 if holding > 0 else 0.0
             shadow_cols["BuyMarketCapPct"].append(round(buy_pct, 3))
+            shadow_cols["NetBuyMarketCapPct"].append(round(net_buy_cr / mc * 100, 3) if mc > 0 else 0.0)
             shadow_cols["PromoterStakeAdditionPct"].append(round(stake_pct, 3))
             shadow_cols["PromoterOwnershipIncreasePct"].append(round(exposure_pct, 3))
         for col, values in shadow_cols.items():
