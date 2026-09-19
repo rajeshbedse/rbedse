@@ -186,6 +186,42 @@ def _window_metrics(events: pd.DataFrame, as_of_date: pd.Timestamp) -> dict:
             }
         )
 
+    # Decision window = latest 30D. Behaviour context = preceding 60D
+    # (days -90 through -31). Keep these separate so historical activity
+    # cannot masquerade as current conviction.
+    prior_start = as_of_date - pd.Timedelta(days=90)
+    prior_end = as_of_date - pd.Timedelta(days=30)
+    prior_buys = buys[buys["TransactionDate"].between(prior_start, prior_end)]
+    prior_sells = sells[sells["TransactionDate"].between(prior_start, prior_end)]
+    result["Prior60DBuyValue"] = float(prior_buys["Value"].sum())
+    result["Prior60DSellValue"] = float(prior_sells["Value"].sum())
+    result["Prior60DNetBuyValue"] = result["Prior60DBuyValue"] - result["Prior60DSellValue"]
+    result["Current30DBuyValue"] = result["BuyValue30D"]
+    result["Current30DSellValue"] = result["SellValue30D"]
+    result["Current30DNetBuyValue"] = result["NetBuyValue30D"]
+    prior_net = result["Prior60DNetBuyValue"]
+    current_net = result["Current30DNetBuyValue"]
+    if prior_net > 0:
+        result["CurrentVsPriorNetBuyPct"] = round((current_net / prior_net - 1) * 100, 1)
+    elif current_net > 0:
+        result["CurrentVsPriorNetBuyPct"] = None
+    elif prior_net < 0:
+        result["CurrentVsPriorNetBuyPct"] = round((current_net / abs(prior_net)) * 100, 1)
+    else:
+        result["CurrentVsPriorNetBuyPct"] = 0.0
+    if current_net < 0:
+        result["PromoterBehaviourSignal"] = "Current Net Selling"
+    elif current_net > 0 and prior_net <= 0:
+        result["PromoterBehaviourSignal"] = "New Accumulation"
+    elif current_net > 0 and current_net > prior_net:
+        result["PromoterBehaviourSignal"] = "Accelerating Accumulation"
+    elif current_net > 0 and prior_net > 0 and current_net < prior_net:
+        result["PromoterBehaviourSignal"] = "Slowing Accumulation"
+    elif current_net > 0:
+        result["PromoterBehaviourSignal"] = "Continuing Accumulation"
+    else:
+        result["PromoterBehaviourSignal"] = "No Net Flow"
+
     result["BuyAcceleration"] = round(
         result["BuyValue7D"] / max(result["BuyValue30D"], 1e-9), 4
     )
