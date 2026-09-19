@@ -182,10 +182,15 @@ def _build_aggregates(csv_path: Path) -> tuple[pd.DataFrame, set, set]:
     df_sells["_value"] = df_sells["Securities Acquired/Disposed (Value)"].apply(_v)
     df_sells["_qty"] = df_sells["Securities Acquired/Disposed (No.)"].apply(_q)
     df_sells["_priced"] = (df_sells["_value"] > 0) & (df_sells["_qty"] > 0)
-    sell_values = df_sells[df_sells["_priced"]].groupby("Symbol")["_value"].sum()
+    sell_priced = df_sells[df_sells["_priced"]]
+    sell_values = sell_priced.groupby("Symbol")["_value"].sum()
+    sell_qty = sell_priced.groupby("Symbol")["_qty"].sum()
     buy_values = agg.set_index("Symbol")["PricedValuePurchased"]
+    buy_qty = agg.set_index("Symbol")["TotalQty"].fillna(0.0)
     agg["MarketBuyValue"] = agg["Symbol"].map(buy_values).fillna(0.0)
     agg["MarketSellValue"] = agg["Symbol"].map(sell_values).fillna(0.0)
+    agg["GrossSellQty"] = agg["Symbol"].map(sell_qty).fillna(0.0)
+    agg["NetBuyQty"] = agg["Symbol"].map(buy_qty).fillna(0.0) - agg["GrossSellQty"]
     agg["NetBuyValue"] = agg["MarketBuyValue"] - agg["MarketSellValue"]
     agg["SellBuyRatioPct"] = (agg["MarketSellValue"] / agg["MarketBuyValue"].replace(0, float("nan")) * 100).round(2)
     agg["HasMarketSell"] = agg["MarketSellValue"] > 0
