@@ -764,7 +764,11 @@ def _apply_timing_metrics(df: pd.DataFrame, csv_path: Path, as_of_date: date | N
         "BuyValue7D", "BuyValue15D", "BuyValue30D", "BuyValue60D", "BuyValue90D",
         "SellTxn7D", "SellTxn15D", "SellTxn30D", "SellTxn60D", "SellTxn90D",
         "SellValue7D", "SellValue15D", "SellValue30D", "SellValue60D", "SellValue90D",
-        "NetBuyValue7D", "NetBuyValue30D", "UniquePromotersBuying", "UniquePromotersSelling",
+        "NetBuyValue7D", "NetBuyValue30D",
+        "Prior60DBuyValue", "Prior60DSellValue", "Prior60DNetBuyValue",
+        "Current30DBuyValue", "Current30DSellValue", "Current30DNetBuyValue",
+        "CurrentVsPriorNetBuyPct", "PromoterBehaviourSignal",
+        "UniquePromotersBuying", "UniquePromotersSelling",
         "BuyAcceleration", "Freshness", "AccumulationStage",
     ]
     if snapshot.empty:
