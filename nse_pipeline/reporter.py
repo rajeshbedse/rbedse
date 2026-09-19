@@ -25,7 +25,8 @@ SCORE_COLS = [
     "Symbol", "CompanyName", "Score", "Category",
     "ScorePromo", "ScoreFund", "ScoreTech", "ScoreRisk",
     "LastPrice", "AvgPrice", "PriceDiffPct",
-    "PromoHolding", "ValueCr", "NumBuyTxn", "acqtoDt",
+    "PromoHolding", "ValueCr", "MarketBuyValue", "MarketSellValue", "NetBuyValue",
+    "SellBuyRatioPct", "PromoterFlowStatus", "TransferLikeFiling", "NumBuyTxn", "acqtoDt",
     "PromoConvictionPct",
     "MarketCapCr", "PE",
     "RevGrowthPct", "EBITDAGrowthPct", "PATGrowthPct", "EPSGrowthPct",
@@ -36,8 +37,10 @@ SCORE_COLS = [
     "SignalStage", "FirstBuyDate", "LastBuyDate", "AccumulationDays",
     "DaysSinceFirstBuy", "DaysSinceLastBuy", "BuyTxn7D", "BuyTxn15D",
     "BuyTxn30D", "BuyTxn60D", "BuyTxn90D", "BuyValue7D", "BuyValue15D",
-    "BuyValue30D", "BuyValue60D", "BuyValue90D", "NetBuyValue7D",
-    "NetBuyValue30D", "UniquePromotersBuying", "UniquePromotersSelling",
+    "BuyValue30D", "BuyValue60D", "BuyValue90D", "SellTxn7D", "SellTxn15D", "SellTxn30D",
+    "SellTxn60D", "SellTxn90D", "SellValue7D", "SellValue15D", "SellValue30D",
+    "SellValue60D", "SellValue90D", "NetBuyValue7D", "NetBuyValue30D",
+    "UniquePromotersBuying", "UniquePromotersSelling",
     "BuyAcceleration",
 ]
 
