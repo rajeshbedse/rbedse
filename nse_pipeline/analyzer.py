@@ -189,6 +189,51 @@ def _build_aggregates(csv_path: Path) -> tuple[pd.DataFrame, set, set]:
     agg["NetBuyValue"] = agg["MarketBuyValue"] - agg["MarketSellValue"]
     agg["SellBuyRatioPct"] = (agg["MarketSellValue"] / agg["MarketBuyValue"].replace(0, float("nan")) * 100).round(2)
     agg["HasMarketSell"] = agg["MarketSellValue"] > 0
+
+    # A buy and a sell reported in the same NSE filing can represent a
+    # promoter-group transfer rather than fresh group-level accumulation.
+    # We expose this as a transfer-like pattern; we do not assert that
+    # every same-filing buy/sell is an internal transfer.
+    buy_filing_keys = {
+        (str(sym).strip().upper(), str(url).strip())
+        for sym, url in zip(
+            df_buys["Symbol"],
+            df_buys["Details URL"].fillna("") if "Details URL" in df_buys.columns else pd.Series("", index=df_buys.index),
+        )
+        if str(url).strip()
+    }
+    sell_filing_keys = {
+        (str(sym).strip().upper(), str(url).strip())
+        for sym, url in zip(
+            df_sells["Symbol"],
+            df_sells["Details URL"].fillna("") if "Details URL" in df_sells.columns else pd.Series("", index=df_sells.index),
+        )
+        if str(url).strip()
+    }
+    transfer_like_symbols = {sym for sym, _url in buy_filing_keys & sell_filing_keys}
+    agg["TransferLikeFiling"] = agg["Symbol"].astype(str).str.strip().str.upper().isin(transfer_like_symbols)
+
+    def _flow_status(row):
+        buy = float(row.get("MarketBuyValue") or 0)
+        sell = float(row.get("MarketSellValue") or 0)
+        net = buy - sell
+        ratio = float(row.get("SellBuyRatioPct") or 0)
+        if buy <= 0 and sell > 0:
+            return "Net Selling"
+        if net < 0:
+            return "Net Selling"
+        if sell > 0 and bool(row.get("TransferLikeFiling", False)) and ratio >= 75:
+            return "Transfer-like"
+        if sell > 0 and ratio >= 50:
+            return "Heavy Selling Pressure"
+        if sell > 0:
+            return "Net Buying with Selling"
+        return "Net Buying"
+
+    agg["PromoterFlowStatus"] = agg.apply(_flow_status, axis=1)
+    agg["NetBuyValueCr"] = (agg["NetBuyValue"] / 1e7).round(2)
+    agg["GrossBuyValueCr"] = (agg["MarketBuyValue"] / 1e7).round(2)
+    agg["GrossSellValueCr"] = (agg["MarketSellValue"] / 1e7).round(2)
     agg["SellBuyExclusion"] = agg["SellBuyRatioPct"] > MAX_SELL_BUY_RATIO_PCT
     sell_syms = set(agg.loc[agg["SellBuyExclusion"], "Symbol"].astype(str).str.strip().str.upper())
     return agg, pledge_syms, sell_syms
@@ -597,16 +642,20 @@ def _score_row(row: pd.Series, fund: dict) -> tuple[int, int, int, int, int, str
     fund_score = 0
     tech_score = 0
     risk_score = 0
-    promo_score += SCORE_PROMO_BUY
+    # Conviction is based on net promoter-group flow, not gross purchases.
+    # Gross buy remains available as an informational field.
+    net_buy_value = float(row.get("NetBuyValue") or 0)
+    if net_buy_value > 0:
+        promo_score += SCORE_PROMO_BUY
     if int(row.get("NumBuyTxn", 0) or 0) >= 3:
         promo_score += SCORE_PROMO_MULTI_TXN
     market_cap_cr = fund.get("MarketCapCr")
-    value_cr = float(row.get("ValueCr") or 0)
+    net_value_cr = max(net_buy_value, 0) / 1e7
     if market_cap_cr and market_cap_cr > 0:
-        conviction_pct = value_cr / market_cap_cr * 100
+        conviction_pct = net_value_cr / market_cap_cr * 100
         if conviction_pct >= 0.25:
             promo_score += SCORE_PROMO_CONVICTION
-    elif value_cr >= 10:
+    elif net_value_cr >= 10:
         promo_score += SCORE_PROMO_CONVICTION
     holding = float(row.get("PromoHolding") or 0)
     if holding > 65:
@@ -663,8 +712,10 @@ def _apply_scores(df: pd.DataFrame, screener_data: dict, dma_data: dict | None =
         fund = sdata.get("fundamentals", {}) if sdata else {}
         for col in screener_fund_cols: df.at[idx, col] = fund.get(col)
         mc = fund.get("MarketCapCr")
-        vc = float(row.get("ValueCr") or 0)
-        df.at[idx, "PromoConvictionPct"] = round(vc / mc * 100, 3) if mc and mc > 0 else None
+        gross_vc = float(row.get("MarketBuyValue") or 0) / 1e7
+        net_vc = max(float(row.get("NetBuyValue") or 0), 0) / 1e7
+        df.at[idx, "GrossBuyConvictionPct"] = round(gross_vc / mc * 100, 3) if mc and mc > 0 else None
+        df.at[idx, "PromoConvictionPct"] = round(net_vc / mc * 100, 3) if mc and mc > 0 else None
         fund_with_dma = dict(fund)
         fund_with_dma["DMA50"] = row.get("DMA50")
         fund_with_dma["DMA200"] = row.get("DMA200")
