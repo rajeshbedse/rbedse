@@ -15,8 +15,8 @@
   "counts": {
     "symbols": 49,
     "price_history_rows": 11875,
-    "promoter_activity_rows": 445,
-    "promoter_holding_history_rows": 363,
+    "promoter_activity_rows": 440,
+    "promoter_holding_history_rows": 360,
     "company_classification_rows": 49,
     "promoter_cost_history_rows": 11875,
     "final_shortlist": 49
