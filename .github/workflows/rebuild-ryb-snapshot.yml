@@ -1,0 +1,82 @@
+name: Rebuild RYB Snapshot
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_date:
+        description: "Existing rbedse scan date (YYYY-MM-DD); leave blank for latest"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild:
+    name: Rebuild RYB data from existing scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout rbedse
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Determine source scan
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.run_date }}" ]; then
+            RUN_DATE="${{ inputs.run_date }}"
+          else
+            RUN_DATE=$(find output -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' | sort | tail -1)
+          fi
+          test -n "$RUN_DATE"
+          test -f "output/$RUN_DATE/ryb_scan.csv"
+          test -f "output/$RUN_DATE/enriched_full.csv"
+          echo "run_date=$RUN_DATE" >> "$GITHUB_OUTPUT"
+          echo "Using existing scan: $RUN_DATE"
+
+      - name: Checkout RYB
+        uses: actions/checkout@v6
+        with:
+          repository: rajeshbedse/RYB
+          token: ${{ secrets.RYB_REPO_TOKEN }}
+          path: ryb
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Rebuild and validate
+        env:
+          RUN_DATE: ${{ steps.source.outputs.run_date }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ryb
+          if [ ! -f "../output/$RUN_DATE/regulation31_pledge.csv" ] && [ -f "data/reference/regulation31_pledge.csv" ]; then
+            cp data/reference/regulation31_pledge.csv "../output/$RUN_DATE/regulation31_pledge.csv"
+          fi
+          python scripts/build_snapshot.py "../output/$RUN_DATE"
+          python scripts/augment_risk.py "../output/$RUN_DATE" data
+          python scripts/validate_snapshot.py
+          test -s data/snapshot.json
+
+      - name: Publish rebuilt RYB data
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ryb
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "RYB snapshot is unchanged."
+            exit 0
+          fi
+          git commit -m "Rebuild RYB snapshot from existing scan"
+          git push origin HEAD:main
