@@ -14,11 +14,11 @@
   },
   "counts": {
     "symbols": 50,
-    "price_history_rows": 11936,
+    "price_history_rows": 11986,
     "promoter_activity_rows": 430,
-    "promoter_holding_history_rows": 371,
+    "promoter_holding_history_rows": 375,
     "company_classification_rows": 50,
-    "promoter_cost_history_rows": 11936,
+    "promoter_cost_history_rows": 11986,
     "final_shortlist": 50
   }
 }
