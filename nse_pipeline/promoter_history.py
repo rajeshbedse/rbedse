@@ -17,6 +17,7 @@ import re
 import pandas as pd
 
 from .config import OUTPUT_ROOT, CSV_FILENAME
+from .transaction_utils import deduplicate_transactions
 
 PROMOTER_CATEGORIES = {"promoter", "promoter group", "promoter and director"}
 
@@ -76,6 +77,7 @@ def build_promoter_event_history(csv_path: Path) -> pd.DataFrame:
     """Return clean promoter buy/sell transaction events from an NSE snapshot."""
     df = pd.read_csv(csv_path, encoding="utf-8-sig", dtype=str)
     df.columns = df.columns.str.strip()
+    df, _ = deduplicate_transactions(df)
     required = {
         "Symbol", "Name of Person", "Category of Person", "Type of Instrument",
         "Securities Acquired/Disposed (No.)", "Securities Acquired/Disposed (Value)",
