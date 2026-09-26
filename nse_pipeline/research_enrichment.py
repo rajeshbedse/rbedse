@@ -30,6 +30,7 @@ import pandas as pd
 import requests
 
 from .config import USER_AGENT
+from .transaction_utils import deduplicate_transactions
 
 log = logging.getLogger(__name__)
 
@@ -173,6 +174,7 @@ def build_market_price_history(
 def _prepare_events(csv_path: Path) -> pd.DataFrame:
     df = pd.read_csv(csv_path, encoding="utf-8-sig", dtype=str)
     df.columns = df.columns.str.strip()
+    df, _ = deduplicate_transactions(df)
     df = df[_promoter_mask(df)].copy()
     df["TransactionDate"] = pd.to_datetime(df["Date To"], errors="coerce", dayfirst=True)
     df["Quantity"] = df["Securities Acquired/Disposed (No.)"].map(_num)
