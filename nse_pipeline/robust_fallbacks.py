@@ -139,7 +139,8 @@ def _install_risk_aware_inclusion(analyzer_module) -> None:
 
         raw = pd.read_csv(csv_path, encoding="utf-8-sig", dtype=str)
         raw.columns = raw.columns.str.strip()
-        raw, _ = analyzer_module._deduplicate_transactions(raw)
+        from .transaction_utils import deduplicate_transactions
+        raw, _ = deduplicate_transactions(raw)
         promoter = raw[
             raw["Category of Person"].fillna("").str.strip().str.lower().isin(
                 analyzer_module.PROMOTER_CATEGORIES
