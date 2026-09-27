@@ -1,3 +1,570 @@
+""" 
+Phase 2 — Filter, Enrich, Fetch Prices, Holdings, Fundamentals & Score
+
+Applies:
+  Filter B  No Pledge Creation / Invocation by Promoter/PG
+  Filter C  Promoter market selling <= 25% of promoter market buying
+  Filter A  Promoter holding >= MIN_PROMO_HOLDING (from Screener.in)
+
+Prices are fetched from the NSE Bhavcopy daily CSV
+(nsearchives.nseindia.com) — a single public HTTP download, no browser,
+no cookies, no auth required.  The file covers all equities traded that
+day and is downloaded once, then the whole symbol batch is resolved from
+the in-memory dict.  EQ, BE, and BZ series are all included so SME-listed
+and trade-to-trade symbols are not missed.
+
+Promoter holdings + fundamental data are fetched from Screener.in using
+requests + BeautifulSoup — static HTML, no browser required, fully
+thread-safe.  Each symbol retries up to HOLDING_RETRY_COUNT times on 429
+with exponential backoff (5 s → 10 s → 20 s) before recording None.
+
+Both fetches are parallelised across ThreadPoolExecutor workers.
+No Playwright objects are used or passed across thread boundaries.
+
+Scoring model (0–100):
+  Promoter Signal   — 25 pts
+  Fundamental Signal— 35 pts
+  Technical Signal  — 30 pts
+  Risk deductions   — up to −10 pts
+
+Category labels:
+  🟢 Strong Buy Setup   (≥ 65)
+  🟢 Buy on Breakout    (≥ 50)
+  🟡 Watchlist          (≥ 40)
+  🟠 Fundamental Watch  (≥ 30)
+  🔴 Avoid              (< 30)
+"""
+import csv as _csv
+import io
+import re
+import logging
+import threading
+import time
+import zipfile
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
 from pathlib import Path
 
-# PLACEHOLDER
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+
+from .config import (
+    MIN_PURCHASE_VALUE, MIN_PROMO_HOLDING, MAX_SELL_BUY_RATIO_PCT,
+    PROMOTER_CATEGORIES, PLEDGE_MODES,
+    HOLDING_FETCH_DELAY, HOLDING_RETRY_COUNT,
+    HOLDING_WORKERS, USER_AGENT,
+    TRADES_CSV_FILENAME,
+    SCORE_PROMO_BUY, SCORE_PROMO_MULTI_TXN, SCORE_PROMO_CONVICTION,
+    SCORE_PROMO_HOLDING_INC, SCORE_PROMO_NO_SELL, SCORE_PROMO_NO_PLEDGE,
+    SCORE_FUND_REV_GROWTH, SCORE_FUND_EBITDA_GROWTH, SCORE_FUND_PAT_GROWTH,
+    SCORE_FUND_EPS_GROWTH, SCORE_FUND_ROCE, SCORE_FUND_DE_RATIO, SCORE_FUND_OCF_POS,
+    SCORE_TECH_ABOVE_REF, SCORE_TECH_ABOVE_50DMA, SCORE_TECH_ABOVE_200DMA,
+    SCORE_TECH_DMA_CROSS, SCORE_TECH_VOL_EXPANSION, SCORE_TECH_REL_STRENGTH,
+    SCORE_RISK_PLEDGE, SCORE_RISK_MARGIN_FALL, SCORE_RISK_HIGH_PE,
+    CATEGORY_STRONG_BUY, CATEGORY_BUY_BREAKOUT, CATEGORY_WATCHLIST, CATEGORY_WEAK_FUND,
+)
+from .promoter_history import build_accumulation_snapshot
+from .transaction_utils import deduplicate_transactions
+
+log = logging.getLogger(__name__)
+
+_NSE_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.nseindia.com/",
+}
+
+_SCREENER_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+_BHAVCOPY_SERIES = {"EQ", "BE", "BZ"}
+
+def _v(raw) -> float:
+    return float(re.sub(r"[^\d.]", "", str(raw)) or 0)
+
+def _q(raw) -> float:
+    return float(re.sub(r"[^\d.]", "", str(raw)) or 0)
+
+def _is_equity_instrument(series: pd.Series) -> pd.Series:
+    return series.fillna("").astype(str).str.strip().str.lower().eq("equity")
+
+def _build_aggregates(csv_path: Path) -> tuple[pd.DataFrame, set, set]:
+    df = pd.read_csv(csv_path, encoding="utf-8-sig", dtype=str)
+    df.columns = df.columns.str.strip()
+    df, duplicate_rows_removed = deduplicate_transactions(df)
+    log.info("Transaction de-duplication: removed %d repeated filing row(s)", duplicate_rows_removed)
+    df_promo = df[df["Category of Person"].str.strip().str.lower().isin(PROMOTER_CATEGORIES)].copy()
+    df_buys = df[
+        _is_equity_instrument(df["Type of Instrument"]) &
+        (df["Transaction Type"].str.strip().str.lower() == "buy") &
+        (df["Mode of Acquisition/Disposal"].str.strip().str.lower() == "market purchase") &
+        df["Category of Person"].str.strip().str.lower().isin(PROMOTER_CATEGORIES)
+    ].copy()
+    df_buys["_value"] = df_buys["Securities Acquired/Disposed (Value)"].apply(_v)
+    df_buys["_qty"] = df_buys["Securities Acquired/Disposed (No.)"].apply(_q)
+    df_buys["_date"] = pd.to_datetime(df_buys["Date To"].str.strip(), format="%d-%m-%Y", errors="coerce")
+    df_buys["_priced"] = (df_buys["_value"] > 0) & (df_buys["_qty"] > 0)
+    agg = df_buys.groupby("Symbol").agg(
+        CompanyName=("Company Name", "first"),
+        ValuePurchased=("_value", "sum"),
+        ReportedBuyQty=("_qty", "sum"),
+        ReportedBuyTxn=("_value", "count"),
+        acqtoDt=("_date", "max"),
+    ).reset_index()
+    priced = df_buys[df_buys["_priced"]].groupby("Symbol").agg(
+        TotalQty=("_qty", "sum"), NumBuyTxn=("_value", "count")
+    ).reset_index()
+    priced_value = df_buys[df_buys["_priced"]].groupby("Symbol")["_value"].sum()
+    agg["TotalQty"] = agg["Symbol"].map(priced.set_index("Symbol")["TotalQty"])
+    agg["NumBuyTxn"] = agg["Symbol"].map(priced.set_index("Symbol")["NumBuyTxn"]).fillna(0).astype(int)
+    agg["PricedValuePurchased"] = agg["Symbol"].map(priced_value).fillna(0.0)
+    agg["ValuePurchased"] = agg["PricedValuePurchased"]
+    agg["AvgPrice"] = (agg["PricedValuePurchased"] / agg["TotalQty"].replace(0, float("nan"))).round(2)
+    agg["MissingValueQty"] = (agg["ReportedBuyQty"] - agg["TotalQty"].fillna(0)).round(4)
+    agg["MissingValueTxn"] = (agg["ReportedBuyTxn"] - agg["NumBuyTxn"]).astype(int)
+    agg["acqtoDt"] = agg["acqtoDt"].dt.strftime("%d-%m-%Y")
+    agg["ValueCr"] = (agg["PricedValuePurchased"] / 1e7).round(2)
+    agg = agg[agg["PricedValuePurchased"] >= MIN_PURCHASE_VALUE].sort_values("PricedValuePurchased", ascending=False).reset_index(drop=True)
+    pledge_syms = set(df_promo[df_promo["Mode of Acquisition/Disposal"].str.strip().str.lower().isin(PLEDGE_MODES)]["Symbol"].str.strip().str.upper())
+    df_sells = df_promo[
+        _is_equity_instrument(df_promo["Type of Instrument"]) &
+        (df_promo["Transaction Type"].str.strip().str.lower() == "sell") &
+        (df_promo["Mode of Acquisition/Disposal"].str.strip().str.lower() == "market sale")
+    ].copy()
+    df_sells["_value"] = df_sells["Securities Acquired/Disposed (Value)"].apply(_v)
+    df_sells["_qty"] = df_sells["Securities Acquired/Disposed (No.)"].apply(_q)
+    df_sells["_priced"] = (df_sells["_value"] > 0) & (df_sells["_qty"] > 0)
+    sell_priced = df_sells[df_sells["_priced"]]
+    sell_values = sell_priced.groupby("Symbol")["_value"].sum()
+    sell_qty = sell_priced.groupby("Symbol")["_qty"].sum()
+    agg["MarketBuyValue"] = agg["Symbol"].map(agg.set_index("Symbol")["PricedValuePurchased"]).fillna(0.0)
+    agg["MarketSellValue"] = agg["Symbol"].map(sell_values).fillna(0.0)
+    agg["GrossSellQty"] = agg["Symbol"].map(sell_qty).fillna(0.0)
+    agg["NetBuyQty"] = agg["TotalQty"].fillna(0.0) - agg["GrossSellQty"]
+    agg["NetBuyValue"] = agg["MarketBuyValue"] - agg["MarketSellValue"]
+    agg["SellBuyRatioPct"] = (agg["MarketSellValue"] / agg["MarketBuyValue"].replace(0, float("nan")) * 100).round(2)
+    agg["HasMarketSell"] = agg["MarketSellValue"] > 0
+    agg["TransferLikeFiling"] = False
+    agg["PromoterFlowStatus"] = agg.apply(
+        lambda row: "Net Selling" if float(row.get("NetBuyValue") or 0) < 0
+        else "Net Buying with Selling" if float(row.get("MarketSellValue") or 0) > 0
+        else "Net Buying", axis=1
+    )
+    agg["NetBuyValueCr"] = (agg["NetBuyValue"] / 1e7).round(2)
+    agg["GrossBuyValueCr"] = (agg["MarketBuyValue"] / 1e7).round(2)
+    agg["GrossSellValueCr"] = (agg["MarketSellValue"] / 1e7).round(2)
+    agg["SellBuyExclusion"] = agg["SellBuyRatioPct"] > MAX_SELL_BUY_RATIO_PCT
+    sell_syms = set(agg.loc[agg["SellBuyExclusion"], "Symbol"].astype(str).str.strip().str.upper())
+    return agg, pledge_syms, sell_syms
+
+_BHAVCOPY_BASE = "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_{date}_F_0000.csv.zip"
+_BHAVCOPY_HEADERS = {"User-Agent": USER_AGENT, "Accept": "*/*", "Referer": "https://www.nseindia.com/"}
+
+def _download_bhavcopy(max_lookback: int = 5, as_of_date: date | None = None):
+    session = requests.Session()
+    session.headers.update(_BHAVCOPY_HEADERS)
+    today = as_of_date or date.today()
+    attempted = []
+    for delta in range(max_lookback + 1):
+        d = today - timedelta(days=delta)
+        if d.weekday() >= 5:
+            continue
+        ds = d.strftime("%Y%m%d")
+        attempted.append(ds)
+        try:
+            resp = session.get(_BHAVCOPY_BASE.format(date=ds), timeout=20)
+            if resp.status_code != 200 or resp.content[:2] != b"PK":
+                continue
+            z = zipfile.ZipFile(io.BytesIO(resp.content))
+            rows = _csv.DictReader(z.read(z.namelist()[0]).decode("utf-8").splitlines())
+            prices = {}
+            for row in rows:
+                series = row.get("SctySrs", "").strip()
+                if series not in _BHAVCOPY_SERIES:
+                    continue
+                sym = row.get("TckrSymb", "").strip()
+                if sym in prices and series != "EQ":
+                    continue
+                try:
+                    prices[sym] = {"LastPrice": float(row["ClsPric"])}
+                except (ValueError, KeyError):
+                    prices[sym] = {"LastPrice": None}
+            return prices
+        except Exception:
+            continue
+    return None
+
+def _parse_52_week_rows(text: str):
+    lines = text.splitlines()
+    header_idx = next((i for i, line in enumerate(lines) if "Adjusted_52_Week_High" in line or "Adjusted 52_Week_High" in line), None)
+    if header_idx is None:
+        return {}
+    rows = _csv.DictReader(lines[header_idx:])
+    result = {}
+    for row in rows:
+        sym = (row.get("SYMBOL") or row.get("Symbol") or row.get("TckrSymb") or "").strip()
+        if not sym:
+            continue
+        def _report_num(*keys):
+            for key in keys:
+                raw = row.get(key)
+                if raw not in (None, "", "-", "NA"):
+                    try:
+                        return float(str(raw).replace(",", "").strip())
+                    except (ValueError, TypeError):
+                        pass
+            return None
+        result[sym] = {
+            "52WeekHigh": _report_num("Adjusted 52_Week_High", "Adjusted_52_Week_High"),
+            "52WeekLow": _report_num("Adjusted 52_Week_Low", "Adjusted_52_Week_Low"),
+        }
+    return result
+
+def _fetch_52_week_prices(symbols, as_of_date=None):
+    try:
+        from nse_pipeline.analyzer import _download_52_week_report
+        report = _download_52_week_report(as_of_date=as_of_date)
+    except Exception:
+        report = None
+    return {sym: (report.get(sym, {}) if report else {}) for sym in symbols}
+
+def _fetch_prices(symbols, as_of_date=None):
+    bhavcopy = _download_bhavcopy(as_of_date=as_of_date)
+    return {sym: (bhavcopy.get(sym, {}) if bhavcopy else {}) for sym in symbols}
+
+_DMA_WORKERS = 8
+_DMA_LOOKBACK = 380
+
+def _fetch_one_bhavcopy(args):
+    _date_str, url = args
+    try:
+        resp = requests.get(url, headers=_BHAVCOPY_HEADERS, timeout=15)
+        if resp.status_code != 200 or resp.content[:2] != b"PK":
+            return None
+        z = zipfile.ZipFile(io.BytesIO(resp.content))
+        rows = _csv.DictReader(z.read(z.namelist()[0]).decode("utf-8").splitlines())
+        prices = {}
+        for row in rows:
+            if row.get("SctySrs", "").strip() not in _BHAVCOPY_SERIES:
+                continue
+            sym = row.get("TckrSymb", "").strip()
+            try:
+                prices[sym] = float(row["ClsPric"])
+            except (ValueError, KeyError):
+                pass
+        return prices
+    except Exception:
+        return None
+
+def _fetch_dma(symbols, lookback_days=_DMA_LOOKBACK, as_of_date=None):
+    sym_set = set(symbols)
+    today = as_of_date or date.today()
+    candidates = []
+    for delta in range(lookback_days):
+        d = today - timedelta(days=delta)
+        if d.weekday() >= 5:
+            continue
+        ds = d.strftime("%Y%m%d")
+        candidates.append((ds, _BHAVCOPY_BASE.format(date=ds)))
+    with ThreadPoolExecutor(max_workers=_DMA_WORKERS) as pool:
+        results = list(pool.map(_fetch_one_bhavcopy, candidates))
+    sym_closes = {s: [] for s in sym_set}
+    for daily_prices in results:
+        if daily_prices:
+            for sym in sym_set:
+                if daily_prices.get(sym) is not None:
+                    sym_closes[sym].append(daily_prices[sym])
+    output = {}
+    for sym in sym_set:
+        closes = sym_closes[sym]
+        n = len(closes)
+        dma50 = round(sum(closes[:50]) / 50, 2) if n >= 50 else None
+        dma200 = round(sum(closes[:200]) / 200, 2) if n >= 200 else None
+        six_m = None
+        if n >= 60:
+            p_now, p_then = closes[0], closes[min(126, n-1)]
+            if p_then:
+                six_m = round((p_now / p_then - 1) * 100, 1)
+        output[sym] = {"DMA50": dma50, "DMA200": dma200, "SixMonthReturn": six_m}
+    return output
+
+def _parse_holding_html(html: str):
+    soup = BeautifulSoup(html, "html.parser")
+    section = soup.find(id="shareholding")
+    root = section if section else soup
+    for row in root.find_all("tr"):
+        text = " ".join(row.get_text().split())
+        if re.match(r"^Promoters\s*[+-]?", text, re.I):
+            pcts = re.findall(r"([\d.]+)%", text)
+            if pcts:
+                return float(pcts[0])
+    return None
+
+def _parse_num(text):
+    cleaned = re.sub(r"[^\d.\-]", "", text.replace(",", ""))
+    try:
+        return float(cleaned)
+    except (ValueError, TypeError):
+        return None
+
+def _parse_fundamentals_html(html: str):
+    soup = BeautifulSoup(html, "html.parser")
+    result = {"MarketCapCr": None, "PE": None, "RevGrowthPct": None, "EBITDAGrowthPct": None, "PATGrowthPct": None, "EPSGrowthPct": None, "ROCEPct": None, "DE_Ratio": None, "OCFPositive": None, "OPMPct": None}
+    top = soup.find(id="top-ratios")
+    if top:
+        for li in top.find_all("li"):
+            name_el = li.find("span", class_="name")
+            val_el = li.find("span", class_="nowrap") or li.find("span", class_="value")
+            if not name_el or not val_el:
+                continue
+            name = name_el.get_text(strip=True).lower()
+            val = _parse_num(val_el.get_text(strip=True))
+            if "market cap" in name: result["MarketCapCr"] = val
+            elif "p/e" in name or name == "pe": result["PE"] = val
+            elif "roce" in name: result["ROCEPct"] = val
+    for table in soup.find_all("table"):
+        header = table.find("tr")
+        if not header:
+            continue
+        ht = header.get_text(" ", strip=True).lower()
+        if "compounded sales" in ht:
+            for tr in table.find_all("tr")[1:]:
+                cells = tr.find_all("td")
+                if len(cells) >= 2 and "ttm" in cells[0].get_text(strip=True).lower():
+                    result["RevGrowthPct"] = _parse_num(cells[1].get_text(strip=True))
+            continue
+        if "compounded profit" in ht:
+            for tr in table.find_all("tr")[1:]:
+                cells = tr.find_all("td")
+                if len(cells) >= 2 and "ttm" in cells[0].get_text(strip=True).lower():
+                    result["PATGrowthPct"] = _parse_num(cells[1].get_text(strip=True))
+            continue
+        for tr in table.find_all("tr"):
+            cols = tr.find_all("td")
+            if len(cols) < 2:
+                continue
+            label = cols[0].get_text(strip=True).lower()
+            vals = [_parse_num(c.get_text(strip=True)) for c in cols[1:]]
+            vals = [v for v in vals if v is not None]
+            if not vals:
+                continue
+            if ("sales" in label or "revenue" in label) and result["RevGrowthPct"] is None: result["RevGrowthPct"] = vals[-1]
+            elif "operating profit" in label and "margin" not in label and result["EBITDAGrowthPct"] is None: result["EBITDAGrowthPct"] = vals[-1]
+            elif "opm" in label or ("operating" in label and "margin" in label):
+                if result["OPMPct"] is None: result["OPMPct"] = vals[-1]
+            elif ("net profit" in label or "profit after tax" in label) and result["PATGrowthPct"] is None: result["PATGrowthPct"] = vals[-1]
+            elif "eps" in label and result["EPSGrowthPct"] is None: result["EPSGrowthPct"] = vals[-1]
+    bs = soup.find(id="balance-sheet")
+    if bs:
+        eq_cap = reserves = borrowings = None
+        for tr in bs.find_all("tr"):
+            cols = tr.find_all("td")
+            if len(cols) < 2:
+                continue
+            label = cols[0].get_text(strip=True).lower()
+            vals = [_parse_num(c.get_text(strip=True)) for c in cols[1:]]
+            vals = [v for v in vals if v is not None]
+            if not vals: continue
+            if "equity capital" in label: eq_cap = vals[-1]
+            elif "reserves" in label: reserves = vals[-1]
+            elif "borrowing" in label: borrowings = vals[-1]
+        if borrowings is not None and eq_cap is not None and reserves is not None:
+            net_worth = eq_cap + reserves
+            result["DE_Ratio"] = round(borrowings / net_worth, 2) if net_worth > 0 else None
+    cf = soup.find(id="cash-flow")
+    if cf:
+        for tr in cf.find_all("tr"):
+            cols = tr.find_all("td")
+            if not cols: continue
+            label = cols[0].get_text(strip=True).lower()
+            if "operating" in label or "from operations" in label:
+                vals = [_parse_num(c.get_text(strip=True)) for c in cols[1:]]
+                vals = [v for v in vals if v is not None]
+                if vals: result["OCFPositive"] = vals[-1] > 0
+                break
+    return result
+
+def _screener_worker(syms_slice, wid, counter, lock, total, log_every):
+    session = requests.Session()
+    session.headers.update(_SCREENER_HEADERS)
+    results = {}
+    time.sleep(wid * 2.0)
+    for sym in syms_slice:
+        holding = None
+        fundamentals = {}
+        for attempt in range(1, HOLDING_RETRY_COUNT + 1):
+            try:
+                resp = session.get(f"https://www.screener.in/company/{sym}/", timeout=15, allow_redirects=True)
+                if resp.status_code == 429:
+                    time.sleep(5 * (2 ** (attempt - 1)))
+                    continue
+                resp.raise_for_status()
+                html = resp.text
+                holding = _parse_holding_html(html)
+                fundamentals = _parse_fundamentals_html(html)
+                break
+            except Exception:
+                break
+        results[sym] = {"holding": holding, "fundamentals": fundamentals}
+        with lock:
+            counter[0] += 1
+            done = counter[0]
+        if done % log_every == 0 or done == total:
+            log.info("  Screener … %d/%d", done, total)
+        time.sleep(HOLDING_FETCH_DELAY)
+    return results
+
+def _fetch_screener_data(symbols):
+    workers = min(HOLDING_WORKERS, len(symbols))
+    slices = [symbols[i::workers] for i in range(workers)]
+    counter = [0]
+    lock = threading.Lock()
+    log_every = max(1, len(symbols)//10)
+    combined = {}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(_screener_worker, sl, wid, counter, lock, len(symbols), log_every) for wid, sl in enumerate(slices)]
+        for fut in futures:
+            combined.update(fut.result())
+    return combined
+
+def _score_row(row, fund):
+    promo_score = fund_score = tech_score = risk_score = 0
+    net_buy_value = float(row.get("NetBuyValue") or 0)
+    if net_buy_value > 0: promo_score += SCORE_PROMO_BUY
+    if int(row.get("NumBuyTxn", 0) or 0) >= 3: promo_score += SCORE_PROMO_MULTI_TXN
+    market_cap_cr = fund.get("MarketCapCr")
+    net_value_cr = max(net_buy_value, 0)/1e7
+    if market_cap_cr and market_cap_cr > 0:
+        if net_value_cr/market_cap_cr*100 >= 0.25: promo_score += SCORE_PROMO_CONVICTION
+    holding = float(row.get("PromoHolding") or 0)
+    if holding > 65: promo_score += SCORE_PROMO_HOLDING_INC
+    if not bool(row.get("HasMarketSell", False)): promo_score += SCORE_PROMO_NO_SELL
+    if not bool(row.get("HasPledging", False)): promo_score += SCORE_PROMO_NO_PLEDGE
+    if fund.get("RevGrowthPct") is not None and fund["RevGrowthPct"] > 15: fund_score += SCORE_FUND_REV_GROWTH
+    if fund.get("EBITDAGrowthPct") is not None and fund["EBITDAGrowthPct"] > 15: fund_score += SCORE_FUND_EBITDA_GROWTH
+    if fund.get("PATGrowthPct") is not None and fund["PATGrowthPct"] > 15: fund_score += SCORE_FUND_PAT_GROWTH
+    if fund.get("EPSGrowthPct") is not None and fund["EPSGrowthPct"] > 15: fund_score += SCORE_FUND_EPS_GROWTH
+    if fund.get("ROCEPct") is not None and fund["ROCEPct"] > 15: fund_score += SCORE_FUND_ROCE
+    if fund.get("DE_Ratio") is not None and fund["DE_Ratio"] < 0.5: fund_score += SCORE_FUND_DE_RATIO
+    if fund.get("OCFPositive") is True: fund_score += SCORE_FUND_OCF_POS
+    last_price = float(row.get("LastPrice") or 0)
+    avg_price = float(row.get("AvgPrice") or 0)
+    if last_price > avg_price > 0: tech_score += SCORE_TECH_ABOVE_REF
+    dma50, dma200 = fund.get("DMA50"), fund.get("DMA200")
+    if dma50 and last_price > dma50: tech_score += SCORE_TECH_ABOVE_50DMA
+    if dma200 and last_price > dma200: tech_score += SCORE_TECH_ABOVE_200DMA
+    if dma50 and dma200 and dma50 > dma200: tech_score += SCORE_TECH_DMA_CROSS
+    price_diff_pct = float(row.get("PriceDiffPct") or 0)
+    if price_diff_pct > 5 and int(row.get("NumBuyTxn", 0) or 0) >= 2: tech_score += SCORE_TECH_VOL_EXPANSION
+    if fund.get("SixMonthReturn") is not None and fund["SixMonthReturn"] > 0: tech_score += SCORE_TECH_REL_STRENGTH
+    if bool(row.get("HasPledging", False)): risk_score += SCORE_RISK_PLEDGE
+    if fund.get("OPMPct") is not None and fund["OPMPct"] < 5: risk_score += SCORE_RISK_MARGIN_FALL
+    if fund.get("PE") is not None and fund["PE"] > 60: risk_score += SCORE_RISK_HIGH_PE
+    total = max(0, min(100, promo_score + fund_score + tech_score + risk_score))
+    if total >= CATEGORY_STRONG_BUY: category = "Strong Buy Setup"
+    elif total >= CATEGORY_BUY_BREAKOUT: category = "Buy on Breakout"
+    elif total >= CATEGORY_WATCHLIST: category = "Watchlist"
+    elif total >= CATEGORY_WEAK_FUND: category = "Fundamental Watch"
+    else: category = "Avoid"
+    return promo_score, fund_score, tech_score, risk_score, total, category
+
+def _apply_scores(df, screener_data, dma_data=None):
+    cols = ["MarketCapCr","PE","RevGrowthPct","EBITDAGrowthPct","PATGrowthPct","EPSGrowthPct","ROCEPct","DE_Ratio","OCFPositive","OPMPct"]
+    for col in ("DMA50","DMA200","SixMonthReturn"):
+        if col not in df.columns: df[col] = None
+    for col in cols: df[col] = None
+    score_rows = []
+    for idx,row in df.iterrows():
+        fund = screener_data.get(str(row["Symbol"]),{}).get("fundamentals",{})
+        for col in cols: df.at[idx,col] = fund.get(col)
+        mc = fund.get("MarketCapCr")
+        gross_vc = float(row.get("MarketBuyValue") or 0)/1e7
+        net_vc = max(float(row.get("NetBuyValue") or 0),0)/1e7
+        df.at[idx,"GrossBuyConvictionPct"] = round(gross_vc/mc*100,3) if mc and mc>0 else None
+        df.at[idx,"PromoConvictionPct"] = round(net_vc/mc*100,3) if mc and mc>0 else None
+        fund_with_dma = dict(fund)
+        fund_with_dma["DMA50"] = row.get("DMA50")
+        fund_with_dma["DMA200"] = row.get("DMA200")
+        fund_with_dma["SixMonthReturn"] = row.get("SixMonthReturn")
+        score_rows.append(_score_row(row,fund_with_dma))
+    (df["ScorePromo"],df["ScoreFund"],df["ScoreTech"],df["ScoreRisk"],df["Score"],df["Category"]) = zip(*score_rows)
+    return df
+
+def _save_promoter_trades(csv_path: Path, candidate_syms: set, out_path: Path) -> None:
+    trade_cols = ["Symbol","Company Name","Name of Person","CIN/DIN","Category of Person","Type of Instrument","Securities Held Prior (No.)","Securities Held Prior (%)","Securities Acquired/Disposed (No.)","Securities Acquired/Disposed (Value)","Transaction Type","Securities Held Post (No.)","Securities Held Post (%)","Date From","Date To","Mode of Acquisition/Disposal","Broadcast Date/Time","Details URL"]
+    try:
+        df = pd.read_csv(csv_path, encoding="utf-8-sig", dtype=str)
+        df.columns = df.columns.str.strip()
+        df, duplicate_rows_removed = deduplicate_transactions(df)
+        mask = (
+            df["Symbol"].isin(candidate_syms)
+            & _is_equity_instrument(df["Type of Instrument"])
+            & (df["Transaction Type"].str.strip().str.lower() == "buy")
+            & (df["Mode of Acquisition/Disposal"].str.strip().str.lower() == "market purchase")
+            & df["Category of Person"].str.strip().str.lower().isin(PROMOTER_CATEGORIES)
+        )
+        trades = df.loc[mask, [c for c in trade_cols if c in df.columns]].copy()
+        trades.to_csv(out_path, index=False, encoding="utf-8-sig")
+        log.info("Promoter trades → %s (%d rows; %d repeated filing row(s) removed)", out_path, len(trades), duplicate_rows_removed)
+    except Exception as exc:
+        log.warning("Could not save promoter trades: %s", exc)
+
+def _signal_stage(freshness, accumulation_stage, cmp_vs_avg_pct):
+    if cmp_vs_avg_pct is None or pd.isna(cmp_vs_avg_pct) or freshness=="No Signal": return "No Signal"
+    premium = float(cmp_vs_avg_pct)
+    if freshness=="Stale": return "Late — Poor Entry"
+    if accumulation_stage=="Early Accumulation" and premium<=10: return "Early Accumulation"
+    if freshness in {"Fresh","Active"} and premium<=10: return "Confirmed Accumulation"
+    if premium<=20: return "Mature — Wait for Pullback"
+    return "Late — Poor Entry"
+
+def _apply_timing_metrics(df, csv_path, as_of_date):
+    snapshot = build_accumulation_snapshot(csv_path, as_of_date or date.today())
+    timing_cols = ["Symbol","FirstBuyDate","LastBuyDate","FirstBuyPrice","LastBuyPrice","WeightedAvgBuyPrice","AccumulationDays","DaysSinceFirstBuy","DaysSinceLastBuy","BuyTxn7D","BuyTxn15D","BuyTxn30D","BuyTxn60D","BuyTxn90D","BuyValue7D","BuyValue15D","BuyValue30D","BuyValue60D","BuyValue90D","SellTxn7D","SellTxn15D","SellTxn30D","SellTxn60D","SellTxn90D","SellValue7D","SellValue15D","SellValue30D","SellValue60D","SellValue90D","NetBuyValue7D","NetBuyValue30D","Prior60DBuyValue","Prior60DSellValue","Prior60DNetBuyValue","Current30DBuyValue","Current30DSellValue","Current30DNetBuyValue","CurrentVsPriorNetBuyPct","PromoterBehaviourSignal","UniquePromotersBuying","UniquePromotersSelling","BuyAcceleration","Freshness","AccumulationStage"]
+    if snapshot.empty:
+        for col in timing_cols[1:]: df[col]=None
+        df["PromoterAvgPrice"]=df.get("AvgPrice")
+        df["CMPvsPromoterAvgPct"]=None
+        df["SignalStage"]="No Signal"
+        return df
+    timing = snapshot[[c for c in timing_cols if c in snapshot.columns]].copy()
+    df = df.merge(timing,on="Symbol",how="left",suffixes=("","_timing"))
+    df["PromoterAvgPrice"]=pd.to_numeric(df["WeightedAvgBuyPrice"],errors="coerce")
+    df["PromoterAvgPrice"]=df["PromoterAvgPrice"].fillna(pd.to_numeric(df["AvgPrice"],errors="coerce"))
+    cmp = pd.to_numeric(df["LastPrice"],errors="coerce")
+    avg = pd.to_numeric(df["PromoterAvgPrice"],errors="coerce")
+    df["CMPvsPromoterAvgPct"]=((cmp-avg)/avg.replace(0,pd.NA)*100).round(1)
+    df["SignalStage"]=[_signal_stage(f,s,p) for f,s,p in zip(df["Freshness"].fillna("No Signal"),df["AccumulationStage"].fillna("No Signal"),df["CMPvsPromoterAvgPct"])]
+    return df
+
+def run(csv_path: Path, full_csv_path: Path, as_of_date: date | None = None):
+    agg, pledge_syms, sell_syms = _build_aggregates(csv_path)
+    agg["HasPledging"] = agg["Symbol"].isin(pledge_syms)
+    agg_clean = agg[~agg["HasPledging"] & ~agg["SellBuyExclusion"]].reset_index(drop=True)
+    symbols = agg_clean["Symbol"].tolist()
+    _save_promoter_trades(csv_path, set(symbols), full_csv_path.parent / TRADES_CSV_FILENAME)
+    prices = _fetch_prices(symbols, as_of_date=as_of_date)
+    week52 = _fetch_52_week_prices(symbols, as_of_date=as_of_date)
+    dma_data = _fetch_dma(symbols, as_of_date=as_of_date)
+    screener_data = _fetch_screener_data(symbols)
+    agg_clean = agg_clean.copy()
+    agg_clean["LastPrice"] = agg_clean["Symbol"].map(lambda s: prices.get(s, {}).get("LastPrice"))
+    agg_clean["52WeekHigh"] = agg_clean["Symbol"].map(lambda s: week52.get(s, {}).get("52WeekHigh"))
+    agg_clean["52WeekLow"] = agg_clean["Symbol"].map(lambda s: week52.get(s, {}).get("52WeekLow"))
+    agg_clean["PromoHolding"] = agg_clean["Symbol"].map({sym: screener_data[sym]["holding"] for sym in symbols})
+    agg_clean["DMA50"] = agg_clean["Symbol"].map({s: dma_data[s]["DMA50"] for s in symbols})
+    agg_clean["DMA200"] = agg_clean["Symbol"].map({s: dma_data[s]["DMA200"] for s in symbols})
+    agg_clean["SixMonthReturn"] = agg_clean["Symbol"].map({s: dma_data[s]["SixMonthReturn"] for s in symbols})
+    agg_clean["PriceDiffPct"] = ((agg_clean["LastPrice"]-agg_clean["AvgPrice"])/agg_clean["AvgPrice"]*100).round(1)
+    agg_clean["AbsDiffPct"] = agg_clean["PriceDiffPct"].abs()
+    agg_clean = _apply_timing_metrics(agg_clean,csv_path,as_of_date)
+    agg_clean = _apply_scores(agg_clean,screener_data,dma_data)
+    full_csv_path.parent.mkdir(parents=True,exist_ok=True)
+    agg_clean.to_csv(full_csv_path,index=False,encoding="utf-8-sig")
+    valid = agg_clean.dropna(subset=["LastPrice","PromoHolding"])
+    return valid[valid["PromoHolding"] >= MIN_PROMO_HOLDING].sort_values("Score",ascending=False).reset_index(drop=True)
