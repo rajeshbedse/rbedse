@@ -477,6 +477,24 @@ def _score_row(row, fund):
     if holding > 65: promo_score += SCORE_PROMO_HOLDING_INC
     if not bool(row.get("HasMarketSell", False)): promo_score += SCORE_PROMO_NO_SELL
     if not bool(row.get("HasPledging", False)): promo_score += SCORE_PROMO_NO_PLEDGE
+
+    # Distinguish gross buying from genuine net accumulation. When promoter
+    # market selling offsets buying, progressively reduce the promoter signal.
+    sell_buy_pct = pd.to_numeric(row.get("MarketSellBuyRatioPct", 0), errors="coerce")
+    sell_buy_pct = 0.0 if pd.isna(sell_buy_pct) else float(sell_buy_pct)
+    if sell_buy_pct <= 10:
+        net_flow_penalty = 0
+    elif sell_buy_pct <= 25:
+        net_flow_penalty = 1
+    elif sell_buy_pct <= 50:
+        net_flow_penalty = 2
+    elif sell_buy_pct <= 75:
+        net_flow_penalty = 3
+    elif sell_buy_pct <= 90:
+        net_flow_penalty = 4
+    else:
+        net_flow_penalty = 5
+    promo_score -= net_flow_penalty
     if fund.get("RevGrowthPct") is not None and fund["RevGrowthPct"] > 15: fund_score += SCORE_FUND_REV_GROWTH
     if fund.get("EBITDAGrowthPct") is not None and fund["EBITDAGrowthPct"] > 15: fund_score += SCORE_FUND_EBITDA_GROWTH
     if fund.get("PATGrowthPct") is not None and fund["PATGrowthPct"] > 15: fund_score += SCORE_FUND_PAT_GROWTH
