@@ -464,15 +464,37 @@ def _timing_penalty(row):
     return min(penalty, 15)
 
 
+def _net_buy_conviction_points(net_buy_value, market_cap_cr):
+    """Convert net promoter accumulation relative to market cap into 0–5 points.
+
+    This is deliberately graduated rather than using a single 0.25% cliff.
+    It measures genuine net accumulation, so offsetting promoter sales reduce
+    the signal automatically.
+    """
+    if market_cap_cr is None or pd.isna(market_cap_cr) or market_cap_cr <= 0:
+        return 0
+    net_value_cr = max(float(net_buy_value or 0), 0) / 1e7
+    pct = net_value_cr / float(market_cap_cr) * 100
+    if pct < 0.05:
+        return 0
+    if pct < 0.10:
+        return 1
+    if pct < 0.25:
+        return 2
+    if pct < 0.50:
+        return 3
+    if pct < 1.00:
+        return 4
+    return 5
+
+
 def _score_row(row, fund):
     promo_score = fund_score = tech_score = risk_score = 0
     net_buy_value = float(row.get("NetBuyValue") or 0)
     if net_buy_value > 0: promo_score += SCORE_PROMO_BUY
     if int(row.get("NumBuyTxn", 0) or 0) >= 3: promo_score += SCORE_PROMO_MULTI_TXN
     market_cap_cr = fund.get("MarketCapCr")
-    net_value_cr = max(net_buy_value, 0)/1e7
-    if market_cap_cr and market_cap_cr > 0:
-        if net_value_cr/market_cap_cr*100 >= 0.25: promo_score += SCORE_PROMO_CONVICTION
+    promo_score += _net_buy_conviction_points(net_buy_value, market_cap_cr)
     holding = float(row.get("PromoHolding") or 0)
     if holding > 65: promo_score += SCORE_PROMO_HOLDING_INC
     if not bool(row.get("HasMarketSell", False)): promo_score += SCORE_PROMO_NO_SELL
@@ -535,9 +557,19 @@ def _apply_scores(df, screener_data, dma_data=None):
         for col in cols: df.at[idx,col] = fund.get(col)
         mc = fund.get("MarketCapCr")
         gross_vc = float(row.get("MarketBuyValue") or 0)/1e7
+        gross_buy_pct = round(gross_vc/mc*100,3) if mc and mc>0 else None
         net_vc = max(float(row.get("NetBuyValue") or 0),0)/1e7
-        df.at[idx,"GrossBuyConvictionPct"] = round(gross_vc/mc*100,3) if mc and mc>0 else None
-        df.at[idx,"PromoConvictionPct"] = round(net_vc/mc*100,3) if mc and mc>0 else None
+        net_buy_pct = round(net_vc/mc*100,3) if mc and mc>0 else None
+        gross_buy_value = float(row.get("MarketBuyValue") or 0)
+        sell_buy_pct = pd.to_numeric(row.get("MarketSellBuyRatioPct", 0), errors="coerce")
+        buy_conversion_pct = (
+            round(max(float(row.get("NetBuyValue") or 0), 0) / gross_buy_value * 100, 1)
+            if gross_buy_value > 0 else None
+        )
+        df.at[idx,"GrossBuyConvictionPct"] = gross_buy_pct
+        df.at[idx,"NetBuyConvictionPct"] = net_buy_pct
+        df.at[idx,"PromoConvictionPct"] = net_buy_pct
+        df.at[idx,"BuyConversionPct"] = buy_conversion_pct
         fund_with_dma = dict(fund)
         fund_with_dma["DMA50"] = row.get("DMA50")
         fund_with_dma["DMA200"] = row.get("DMA200")
