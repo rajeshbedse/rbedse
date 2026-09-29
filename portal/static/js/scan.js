@@ -241,8 +241,18 @@
     if (lastFocused) lastFocused.focus();
   }
   $('#detail-back').addEventListener('click', () => {
-    if (new URLSearchParams(window.location.search).get('symbol')) history.back();
-    else closeDetail();
+    // Return directly to the current Screener state, rather than relying on
+    // the browser history stack. This keeps URL filters/sort intact even when
+    // the detail view was opened from a bookmarked/refreshed URL.
+    const params = new URLSearchParams(window.location.search);
+    params.delete('symbol');
+    const query = params.toString();
+    const url = query ? window.location.pathname + '?' + query : window.location.pathname;
+    history.replaceState({screener: true, symbol: null}, '', url);
+    state.symbol = '';
+    closeDetail(true);
+    restoreURLControls();
+    render();
   });
   $('[data-close-modal]').addEventListener('click', closeDetail);
   document.addEventListener('keydown', e => { if(e.key==='Escape' && !$('#stock-modal').hidden) {
