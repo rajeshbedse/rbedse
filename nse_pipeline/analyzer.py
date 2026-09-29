@@ -26,6 +26,7 @@ Scoring model (0–100):
   Fundamental Signal— 35 pts
   Technical Signal  — 30 pts
   Risk deductions   — up to −10 pts
+  Entry timing       — up to −15 pts
 
 Category labels:
   🟢 Strong Buy Setup   (≥ 65)
@@ -432,6 +433,37 @@ def _fetch_screener_data(symbols):
             combined.update(fut.result())
     return combined
 
+def _timing_penalty(row):
+    """Apply an entry-timing penalty so strong historical signals do not mask a late setup."""
+    penalty = 0
+    premium = pd.to_numeric(row.get("CMPvsPromoterAvgPct"), errors="coerce")
+    days_since_buy = pd.to_numeric(row.get("DaysSinceLastBuy"), errors="coerce")
+    behaviour = str(row.get("PromoterBehaviourSignal") or "").strip()
+
+    if pd.notna(premium):
+        if premium > 30:
+            penalty += 8
+        elif premium > 20:
+            penalty += 5
+        elif premium > 10:
+            penalty += 2
+
+    if pd.notna(days_since_buy):
+        if days_since_buy > 30:
+            penalty += 8
+        elif days_since_buy > 15:
+            penalty += 5
+        elif days_since_buy > 7:
+            penalty += 3
+
+    if behaviour == "Slowing Accumulation":
+        penalty += 5
+
+    # Keep timing meaningful without allowing it to overwhelm the underlying
+    # promoter, fundamental, technical and risk signals.
+    return min(penalty, 15)
+
+
 def _score_row(row, fund):
     promo_score = fund_score = tech_score = risk_score = 0
     net_buy_value = float(row.get("NetBuyValue") or 0)
@@ -465,7 +497,8 @@ def _score_row(row, fund):
     if bool(row.get("HasPledging", False)): risk_score += SCORE_RISK_PLEDGE
     if fund.get("OPMPct") is not None and fund["OPMPct"] < 5: risk_score += SCORE_RISK_MARGIN_FALL
     if fund.get("PE") is not None and fund["PE"] > 60: risk_score += SCORE_RISK_HIGH_PE
-    total = max(0, min(100, promo_score + fund_score + tech_score + risk_score))
+    timing_penalty = _timing_penalty(row)
+    total = max(0, min(100, promo_score + fund_score + tech_score + risk_score - timing_penalty))
     if total >= CATEGORY_STRONG_BUY: category = "Strong Buy Setup"
     elif total >= CATEGORY_BUY_BREAKOUT: category = "Buy on Breakout"
     elif total >= CATEGORY_WATCHLIST: category = "Watchlist"
