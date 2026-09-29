@@ -450,7 +450,7 @@ def _score_row(row, fund):
     if fund.get("PATGrowthPct") is not None and fund["PATGrowthPct"] > 15: fund_score += SCORE_FUND_PAT_GROWTH
     if fund.get("EPSGrowthPct") is not None and fund["EPSGrowthPct"] > 15: fund_score += SCORE_FUND_EPS_GROWTH
     if fund.get("ROCEPct") is not None and fund["ROCEPct"] > 15: fund_score += SCORE_FUND_ROCE
-    if fund.get("DE_Ratio") is not None and fund["DE_Ratio"] < 0.5: fund_score += SCORE_FUND_DE_RATIO
+    if fund.get("DE_Ratio") is not None and 0 <= fund["DE_Ratio"] < 0.5: fund_score += SCORE_FUND_DE_RATIO
     if fund.get("OCFPositive") is True: fund_score += SCORE_FUND_OCF_POS
     last_price = float(row.get("LastPrice") or 0)
     avg_price = float(row.get("AvgPrice") or 0)
