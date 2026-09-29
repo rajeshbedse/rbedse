@@ -51,7 +51,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from .config import (
-    MIN_PURCHASE_VALUE, MIN_PROMO_HOLDING, MAX_SELL_BUY_RATIO_PCT,
+    MIN_PURCHASE_VALUE, MIN_NET_BUY_RANK_VALUE, MIN_PROMO_HOLDING, MAX_SELL_BUY_RATIO_PCT,
     PROMOTER_CATEGORIES, PLEDGE_MODES,
     HOLDING_FETCH_DELAY, HOLDING_RETRY_COUNT,
     HOLDING_WORKERS, USER_AGENT,
@@ -628,7 +628,10 @@ def _apply_timing_metrics(df, csv_path, as_of_date):
 def run(csv_path: Path, full_csv_path: Path, as_of_date: date | None = None):
     agg, pledge_syms, sell_syms = _build_aggregates(csv_path)
     agg["HasPledging"] = agg["Symbol"].isin(pledge_syms)
-    agg_clean = agg[~agg["HasPledging"] & ~agg["SellBuyExclusion"]].reset_index(drop=True)
+    # v2 keeps promoter selling in the candidate universe so it can reduce the
+    # score/rank through net-flow and risk signals instead of silently removing
+    # the stock. Pledge creation/invocation remains an eligibility exclusion.
+    agg_clean = agg[~agg["HasPledging"]].reset_index(drop=True)
     symbols = agg_clean["Symbol"].tolist()
     _save_promoter_trades(csv_path, set(symbols), full_csv_path.parent / TRADES_CSV_FILENAME)
     prices = _fetch_prices(symbols, as_of_date=as_of_date)
@@ -647,7 +650,30 @@ def run(csv_path: Path, full_csv_path: Path, as_of_date: date | None = None):
     agg_clean["AbsDiffPct"] = agg_clean["PriceDiffPct"].abs()
     agg_clean = _apply_timing_metrics(agg_clean,csv_path,as_of_date)
     agg_clean = _apply_scores(agg_clean,screener_data,dma_data)
+
+    # Ranking gate: meaningful promoter accumulation (>= ₹50 lakh net) must
+    # rank ahead of stocks whose promoter buying is negligible or almost fully
+    # offset by promoter selling. The latter remain visible, but are kept in
+    # the lowest ranking tier rather than being removed from the scan.
+    net_buy_values = pd.to_numeric(agg_clean["NetBuyValue"], errors="coerce").fillna(0)
+    agg_clean["NetBuyRankTier"] = (net_buy_values >= MIN_NET_BUY_RANK_VALUE).astype(int)
+    agg_clean = agg_clean.sort_values(
+        ["NetBuyRankTier", "Score"],
+        ascending=[False, False],
+        kind="stable",
+    ).reset_index(drop=True)
+    agg_clean["Rank"] = range(1, len(agg_clean) + 1)
+
     full_csv_path.parent.mkdir(parents=True,exist_ok=True)
     agg_clean.to_csv(full_csv_path,index=False,encoding="utf-8-sig")
     valid = agg_clean.dropna(subset=["LastPrice","PromoHolding"])
-    return valid[valid["PromoHolding"] >= MIN_PROMO_HOLDING].sort_values("Score",ascending=False).reset_index(drop=True)
+    valid = valid[valid["PromoHolding"] >= MIN_PROMO_HOLDING].copy()
+    # Re-rank after the minimum holding filter so Rank is the actual displayed
+    # shortlist rank rather than a rank inherited from the wider candidate set.
+    valid = valid.sort_values(
+        ["NetBuyRankTier", "Score"],
+        ascending=[False, False],
+        kind="stable",
+    ).reset_index(drop=True)
+    valid["Rank"] = range(1, len(valid) + 1)
+    return valid
