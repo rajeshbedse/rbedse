@@ -199,27 +199,6 @@ def _install_risk_aware_inclusion(analyzer_module) -> None:
         if pledge_pct > 0:
             promo -= analyzer_module.SCORE_PROMO_NO_PLEDGE
 
-        # Gross buying alone can overstate conviction when promoters are also
-        # selling heavily. Keep the gross-buy signal, but progressively reduce
-        # the promoter component as the buy flow is offset by market selling.
-        # A clean buyer (0% sell/buy) is unchanged; near-neutral flow (90%+)
-        # receives the maximum promoter-flow penalty.
-        net_accumulation_pct = (
-            max(0.0, 100.0 - sell_pct) if sell_pct < 100.0 else 0.0
-        )
-        if sell_pct <= 10:
-            net_flow_penalty = 0
-        elif sell_pct <= 25:
-            net_flow_penalty = 1
-        elif sell_pct <= 50:
-            net_flow_penalty = 2
-        elif sell_pct <= 75:
-            net_flow_penalty = 3
-        elif sell_pct <= 90:
-            net_flow_penalty = 4
-        else:
-            net_flow_penalty = 5
-        promo -= net_flow_penalty
 
         # Fundamentals are scored symmetrically: strong positive growth earns
         # points, while negative growth / profitability / cash generation takes
