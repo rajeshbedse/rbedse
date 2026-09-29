@@ -5,6 +5,7 @@ from pathlib import Path
 
 # ── Analysis thresholds ───────────────────────────────────────────────────────
 MIN_PURCHASE_VALUE   = 2_000_000   # ₹ — minimum total promoter buy value per symbol
+MIN_NET_BUY_RANK_VALUE = 5_000_000   # ₹ — below this, keep the stock in the lowest ranking tier
 MAX_SELL_BUY_RATIO_PCT = 25.0       # retained for v1 shadow reporting; v2 treats sells as risk
 MIN_PROMO_HOLDING    = 60.0         # % — minimum latest-quarter promoter shareholding
 PRICE_PROXIMITY_BANDS = [10, 20, 30]  # % bands for proximity report
@@ -29,6 +30,11 @@ EXCEL_FILENAME       = "enriched_analysis.xlsx"
 FULL_CSV_FILENAME    = "enriched_full.csv"
 TRADES_CSV_FILENAME  = "promoter_trades.csv"
 LOG_FILENAME         = "run_log.txt"
+
+# ── Ranking ──────────────────────────────────────────────────────────────────
+# Stocks with net promoter buying below ₹50 lakh remain eligible, but are always
+# placed in the lowest ranking tier. This avoids strong fundamentals masking
+# negligible/offsetting promoter accumulation.
 
 # ── Legacy v1 scoring constants (shadow model) ────────────────────────────────
 # Kept unchanged so ScoreV1 remains exactly comparable with historical runs.
