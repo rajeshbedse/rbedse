@@ -35,7 +35,7 @@
     return new Date(year, month - 1, day).getTime();
   };
 
-  let state = { view: 'shortlist', rows: [], search: '', band: 'all', category: 'all', sort: 'date-desc' };
+  let state = { view: 'shortlist', rows: [], search: '', band: 'all', category: 'all', sort: 'rank-asc' };
   let lastFocused = null;
 
   async function getJSON(url) {
@@ -53,7 +53,8 @@
     const [field, direction] = state.sort.split('-');
     rows.sort((a, b) => {
       let av, bv;
-      if (field === 'score') { av = a.score ?? -Infinity; bv = b.score ?? -Infinity; }
+      if (field === 'rank') { av = a.rank ?? Infinity; bv = b.rank ?? Infinity; }
+      else if (field === 'score') { av = a.score ?? -Infinity; bv = b.score ?? -Infinity; }
       else if (field === 'value') { av = a.value_cr ?? -Infinity; bv = b.value_cr ?? -Infinity; }
       else if (field === 'diff') { av = a.price_diff_pct ?? -Infinity; bv = b.price_diff_pct ?? -Infinity; }
       else if (field === 'symbol') { av = a.symbol || ''; bv = b.symbol || ''; }
