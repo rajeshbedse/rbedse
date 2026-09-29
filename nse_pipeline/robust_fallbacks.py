@@ -184,12 +184,53 @@ def _install_risk_aware_inclusion(analyzer_module) -> None:
 
     def score_row(row, fund):
         promo, fund_score, tech, risk, _total, _category = original_score(row, fund)
+
         pledge_pct = pd.to_numeric(row.get("PledgeBuyRatioPct", 0), errors="coerce")
         sell_pct = pd.to_numeric(row.get("MarketSellBuyRatioPct", 0), errors="coerce")
         pledge_pct = 0.0 if pd.isna(pledge_pct) else float(pledge_pct)
         sell_pct = 0.0 if pd.isna(sell_pct) else float(sell_pct)
-        risk_delta = max(-10, _risk_deduction(pledge_pct) + _risk_deduction(sell_pct))
+
+        # The risk-aware inclusion layer deliberately keeps sell/pledge stocks
+        # in the candidate universe. Their presence must therefore reduce the
+        # score; otherwise the legacy "no sell / no pledge" bonuses would make
+        # a risky stock look equivalent to a clean stock.
+        if sell_pct > 0:
+            promo -= analyzer_module.SCORE_PROMO_NO_SELL
+        if pledge_pct > 0:
+            promo -= analyzer_module.SCORE_PROMO_NO_PLEDGE
+
+        # Fundamentals are scored symmetrically: strong positive growth earns
+        # points, while negative growth / profitability / cash generation takes
+        # points away. This prevents a large promoter-buy signal from masking
+        # materially weak business fundamentals.
+        negative_fundamental_penalty = 0
+        if fund.get("RevGrowthPct") is not None and float(fund["RevGrowthPct"]) < 0:
+            negative_fundamental_penalty += 3
+        if fund.get("EBITDAGrowthPct") is not None and float(fund["EBITDAGrowthPct"]) < 0:
+            negative_fundamental_penalty += 3
+        if fund.get("PATGrowthPct") is not None and float(fund["PATGrowthPct"]) < 0:
+            negative_fundamental_penalty += 4
+        if fund.get("EPSGrowthPct") is not None and float(fund["EPSGrowthPct"]) < 0:
+            negative_fundamental_penalty += 3
+        if fund.get("ROCEPct") is not None and float(fund["ROCEPct"]) < 0:
+            negative_fundamental_penalty += 3
+        if fund.get("OCFPositive") is False:
+            negative_fundamental_penalty += 3
+        if fund.get("OPMPct") is not None and float(fund["OPMPct"]) < 0:
+            negative_fundamental_penalty += 2
+        fund_score -= negative_fundamental_penalty
+
+        # Risk activity is graduated by severity. Any disclosed sell or pledge
+        # now has a visible score impact; larger activity receives a stronger
+        # deduction. Combined risk is capped at -15 points.
+        risk_delta = _risk_deduction(pledge_pct) + _risk_deduction(sell_pct)
+        if pledge_pct > 15:
+            risk_delta -= 3
+        if sell_pct > 15:
+            risk_delta -= 3
+        risk_delta = max(-15, risk_delta)
         risk += risk_delta
+
         total = max(0, min(100, promo + fund_score + tech + risk))
         if total >= analyzer_module.CATEGORY_STRONG_BUY:
             category = "Strong Buy Setup"
