@@ -199,6 +199,28 @@ def _install_risk_aware_inclusion(analyzer_module) -> None:
         if pledge_pct > 0:
             promo -= analyzer_module.SCORE_PROMO_NO_PLEDGE
 
+        # Gross buying alone can overstate conviction when promoters are also
+        # selling heavily. Keep the gross-buy signal, but progressively reduce
+        # the promoter component as the buy flow is offset by market selling.
+        # A clean buyer (0% sell/buy) is unchanged; near-neutral flow (90%+)
+        # receives the maximum promoter-flow penalty.
+        net_accumulation_pct = (
+            max(0.0, 100.0 - sell_pct) if sell_pct < 100.0 else 0.0
+        )
+        if sell_pct <= 10:
+            net_flow_penalty = 0
+        elif sell_pct <= 25:
+            net_flow_penalty = 1
+        elif sell_pct <= 50:
+            net_flow_penalty = 2
+        elif sell_pct <= 75:
+            net_flow_penalty = 3
+        elif sell_pct <= 90:
+            net_flow_penalty = 4
+        else:
+            net_flow_penalty = 5
+        promo -= net_flow_penalty
+
         # Fundamentals are scored symmetrically: strong positive growth earns
         # points, while negative growth / profitability / cash generation takes
         # points away. This prevents a large promoter-buy signal from masking
@@ -260,6 +282,10 @@ def _install_risk_aware_inclusion(analyzer_module) -> None:
         pledge = pd.to_numeric(result.get("PledgeBuyRatioPct", 0), errors="coerce").fillna(0)
         sells = pd.to_numeric(result.get("MarketSellBuyRatioPct", 0), errors="coerce").fillna(0)
         result["RiskActivityPct"] = (pledge + sells).round(2)
+        result["PromoterNetAccumulationPct"] = (100 - sells).clip(lower=0).round(2)
+        result["PromoterNetFlowPenalty"] = sells.map(
+            lambda s: 0 if s <= 10 else 1 if s <= 25 else 2 if s <= 50 else 3 if s <= 75 else 4 if s <= 90 else 5
+        )
         result["RiskLevel"] = [_risk_label(float(p), float(s)) for p, s in zip(pledge, sells)]
         result["RiskSummary"] = [
             (
