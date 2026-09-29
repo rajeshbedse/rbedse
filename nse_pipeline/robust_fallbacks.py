@@ -231,7 +231,14 @@ def _install_risk_aware_inclusion(analyzer_module) -> None:
         risk_delta = max(-15, risk_delta)
         risk += risk_delta
 
-        total = max(0, min(100, promo + fund_score + tech + risk))
+        # The fallback wrapper recomputes the final score from its adjusted
+        # components, so preserve the analyzer's entry-timing penalty here.
+        timing_penalty = (
+            analyzer_module._timing_penalty(row)
+            if hasattr(analyzer_module, "_timing_penalty")
+            else 0
+        )
+        total = max(0, min(100, promo + fund_score + tech + risk - timing_penalty))
         if total >= analyzer_module.CATEGORY_STRONG_BUY:
             category = "Strong Buy Setup"
         elif total >= analyzer_module.CATEGORY_BUY_BREAKOUT:
