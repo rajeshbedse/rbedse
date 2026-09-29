@@ -35,8 +35,40 @@
     return new Date(year, month - 1, day).getTime();
   };
 
-  let state = { view: 'shortlist', rows: [], search: '', band: 'all', category: 'all', sort: 'rank-asc' };
+  function readURLState() {
+    const params = new URLSearchParams(window.location.search);
+    return { view: params.get('view') || 'shortlist', search: params.get('search') || '', band: params.get('band') || 'all', category: params.get('category') || 'all', sort: params.get('sort') || 'rank-asc', symbol: params.get('symbol') || '' };
+  }
+
+  let state = { ...readURLState(), rows: [] };
   let lastFocused = null;
+
+  function saveURLState({push = false, symbol = null} = {}) {
+    const params = new URLSearchParams();
+    if (state.view && state.view !== 'shortlist') params.set('view', state.view);
+    if (state.search) params.set('search', state.search);
+    if (state.band !== 'all') params.set('band', state.band);
+    if (state.category !== 'all') params.set('category', state.category);
+    if (state.sort && state.sort !== 'rank-asc') params.set('sort', state.sort);
+    if (symbol) params.set('symbol', symbol);
+    const query = params.toString();
+    const url = query ? window.location.pathname + '?' + query : window.location.pathname;
+    if (push) history.pushState({screener: true, symbol: symbol || null}, '', url);
+    else history.replaceState({screener: true, symbol: symbol || null}, '', url);
+  }
+
+  function restoreURLControls() {
+    $('#scan-search').value = state.search;
+    $('#clear-search').hidden = !state.search;
+    $('#scan-sort').value = state.sort;
+    setFilter('band', state.band, false);
+    setFilter('category', state.category, false);
+    $('.scan-tab').forEach(tab => {
+      const active = tab.dataset.view === state.view;
+      tab.classList.toggle('is-active', active);
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+  }
 
   async function getJSON(url) {
     const res = await fetch(url, {headers: {'Accept':'application/json'}});
@@ -129,15 +161,17 @@
 
   async function loadView(view) {
     state.view = view;
+    saveURLState();
     $('#scan-loading').hidden = false; $('#scan-error').hidden = true; $('#stock-cards').hidden = true; $('.desktop-table-wrap').hidden = true;
     try { const data = await getJSON(`/api/scan/${date}/summary?view=${view}`); state.rows = data.rows || []; render(); }
     catch (e) { console.error(e); $('#scan-error').hidden = false; $('#result-count').textContent = 'Unable to load'; }
     finally { $('#scan-loading').hidden = true; }
   }
 
-  function setFilter(group, value) {
+  function setFilter(group, value, persist = true) {
     state[group] = value;
-    $$(`.filter-option[data-filter="${group}"]`).forEach(b => b.classList.toggle('is-active', b.dataset.value === value));
+    $$('.filter-option[data-filter="' + group + '"]').forEach(b => b.classList.toggle('is-active', b.dataset.value === value));
+    if (persist) saveURLState();
   }
 
   $$('.scan-tab').forEach(tab => tab.addEventListener('click', () => {
@@ -147,10 +181,10 @@
     loadView(tab.dataset.view);
   }));
 
-  $('#scan-search').addEventListener('input', e => { state.search = e.target.value.trim(); $('#clear-search').hidden = !state.search; render(); });
-  $('#clear-search').addEventListener('click', () => { $('#scan-search').value = ''; state.search = ''; $('#clear-search').hidden = true; render(); $('#scan-search').focus(); });
+  $('#scan-search').addEventListener('input', e => { state.search = e.target.value.trim(); $('#clear-search').hidden = !state.search; saveURLState(); render(); });
+  $('#clear-search').addEventListener('click', () => { $('#scan-search').value = ''; state.search = ''; $('#clear-search').hidden = true; saveURLState(); render(); $('#scan-search').focus(); });
   $('#scan-sort').value = state.sort;
-  $('#scan-sort').addEventListener('change', e => { state.sort = e.target.value; render(); });
+  $('#scan-sort').addEventListener('change', e => { state.sort = e.target.value; saveURLState(); render(); });
   $$('.filter-option').forEach(b => b.addEventListener('click', () => setFilter(b.dataset.filter, b.dataset.value)));
   $('#filter-toggle').addEventListener('click', () => { const open = $('#filter-toggle').getAttribute('aria-expanded') === 'true'; $('#filter-toggle').setAttribute('aria-expanded', String(!open)); $('#filter-sheet').hidden = open; });
   $('#filter-close').addEventListener('click', () => { $('#filter-toggle').setAttribute('aria-expanded','false'); $('#filter-sheet').hidden = true; });
@@ -175,8 +209,10 @@
     return `<div class="detail-section"><h3>${tab === 'fundamentals' ? 'Fundamental signals' : tab === 'technical' ? 'Technical signals' : 'Risk signals'}</h3><ul class="signal-list">${signalList(groups[tab])}</ul></div>`;
   }
 
-  function openDetail(symbol) {
+  function openDetail(symbol, fromHistory = false) {
     lastFocused = document.activeElement;
+    if (!fromHistory) saveURLState({push: true, symbol});
+    state.symbol = symbol;
     const modal = $('#stock-modal'); modal.hidden = false; modal.setAttribute('aria-hidden','false'); document.body.classList.add('modal-open');
     $('#detail-loading').hidden = false; $('#detail-content').hidden = true; $('#detail-title').textContent = symbol; $('#detail-panel').innerHTML = '';
     fetch(`/api/scan/${date}/stock/${encodeURIComponent(symbol)}`).then(r => { if(!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }).then(row => {
@@ -196,9 +232,42 @@
       $('#detail-back').focus();
     }).catch(e => { console.error(e); $('#detail-loading').textContent = 'Unable to load this stock analysis. Please try again.'; });
   }
-  function closeDetail() { $('#stock-modal').hidden=true; $('#stock-modal').setAttribute('aria-hidden','true'); document.body.classList.remove('modal-open'); if(lastFocused) lastFocused.focus(); }
-  $('#detail-back').addEventListener('click', closeDetail); $('[data-close-modal]').addEventListener('click', closeDetail);
-  document.addEventListener('keydown', e => { if(e.key==='Escape' && !$('#stock-modal').hidden) closeDetail(); });
+  function closeDetail(fromHistory = false) {
+    $('#stock-modal').hidden=true;
+    $('#stock-modal').setAttribute('aria-hidden','true');
+    document.body.classList.remove('modal-open');
+    state.symbol = '';
+    if (!fromHistory) saveURLState();
+    if (lastFocused) lastFocused.focus();
+  }
+  $('#detail-back').addEventListener('click', () => {
+    if (new URLSearchParams(window.location.search).get('symbol')) history.back();
+    else closeDetail();
+  });
+  $('[data-close-modal]').addEventListener('click', closeDetail);
+  document.addEventListener('keydown', e => { if(e.key==='Escape' && !$('#stock-modal').hidden) {
+    if (new URLSearchParams(window.location.search).get('symbol')) history.back();
+    else closeDetail();
+  } });
 
-  loadView('shortlist');
+  window.addEventListener('popstate', () => {
+    const urlState = readURLState();
+    state.view = urlState.view;
+    state.search = urlState.search;
+    state.band = urlState.band;
+    state.category = urlState.category;
+    state.sort = urlState.sort;
+    state.symbol = urlState.symbol;
+    restoreURLControls();
+    if (urlState.symbol) openDetail(urlState.symbol, true);
+    else {
+      closeDetail(true);
+      loadView(state.view);
+    }
+  });
+
+  restoreURLControls();
+  loadView(state.view).then(() => {
+    if (state.symbol) openDetail(state.symbol, true);
+  });
 })();
