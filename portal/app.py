@@ -120,8 +120,47 @@ def _summary_rows(df,include_flags=False):
     if df is None or df.empty:return []
     return [_row_summary(r,idx,include_flags) for idx,r in enumerate(df.to_dict(orient="records"))]
 _CAT_ORDER=[("Strong Buy Setup","strong-buy","#16a34a"),("Buy on Breakout","buy-breakout","#1a56db"),("Watchlist","watchlist","#f5c800"),("Fundamental Watch","fund-watch","#ff8c00"),("Avoid","avoid","#e32636")]
+def _strongest_conviction_rows(df):
+    """Return stocks meeting the strict promoter-accumulation conviction screen."""
+    if df is None or df.empty:
+        return pd.DataFrame()
+    x=df.copy()
+    for col in ["LastPrice","PromoterAvgPrice","CMPvsPromoterAvgPct","MarketCapCr",
+                "MarketBuyValue","NetBuyValue","DaysSinceLastBuy","HasMarketSell",
+                "HasPledging"]:
+        if col in x.columns and col not in ["HasMarketSell","HasPledging"]:
+            x[col]=pd.to_numeric(x[col],errors="coerce")
+    gross_cr=x["MarketBuyValue"]/1e7 if "MarketBuyValue" in x else pd.Series(index=x.index,dtype=float)
+    net_cr=x["NetBuyValue"]/1e7 if "NetBuyValue" in x else pd.Series(index=x.index,dtype=float)
+    gross_mcap=(gross_cr/x["MarketCapCr"]*100).where(x["MarketCapCr"]>0)
+    net_mcap=(net_cr.clip(lower=0)/x["MarketCapCr"]*100).where(x["MarketCapCr"]>0)
+    mask=(
+        (x["DaysSinceLastBuy"]<=7) &
+        (x["MarketBuyValue"]>=9000000) &
+        (net_cr>0) &
+        (gross_mcap>=0.50) &
+        (net_mcap>=0.25) &
+        (x["HasMarketSell"].fillna(False)==False) &
+        (x["HasPledging"].fillna(False)==False) &
+        (x["LastPrice"]>100) &
+        (x["CMPvsPromoterAvgPct"]>0) &
+        (x["CMPvsPromoterAvgPct"]<=5)
+    )
+    out=x.loc[mask].copy()
+    out["_net_mcap_pct"]=net_mcap.loc[out.index]
+    out["_gross_mcap_pct"]=gross_mcap.loc[out.index]
+    out["_gross_cr"]=gross_cr.loc[out.index]
+    out["_days"]=out["DaysSinceLastBuy"]
+    out["_premium"]=out["CMPvsPromoterAvgPct"]
+    return out.sort_values(
+        ["_days","_net_mcap_pct","_gross_mcap_pct","_premium","_gross_cr"],
+        ascending=[True,False,False,True,False],
+        kind="stable"
+    )
+
+
 def _latest_stats(date_str):
-    empty=dict(cat_breakdown=[],above_ref=0,below_ref=0,total=0,score_avg=None,top3=[],featured=None);df=_load_filtered(date_str)
+    empty=dict(cat_breakdown=[],above_ref=0,below_ref=0,total=0,score_avg=None,top3=[],featured=None,conviction_candidates=[]);df=_load_filtered(date_str)
     if df is None or df.empty:return empty
     total=len(df);cat_counts=df["Category"].value_counts().to_dict() if "Category" in df.columns else {};cat_breakdown=[]
     for label,css,color in _CAT_ORDER:
@@ -138,11 +177,42 @@ def _latest_stats(date_str):
         d2=df.copy();d2["_score"]=pd.to_numeric(d2["Score"],errors="coerce")
         for _,row in d2.nlargest(3,"_score").iterrows():top3.append({"symbol":row.get("Symbol",""),"score":int(row["_score"]) if not math.isnan(row["_score"]) else None,"category_css":_CATEGORY_CSS.get(row.get("Category",""),""),"diff_pct":round(float(row.get("PriceDiffPct") or 0),1)})
     featured=None
-    if top3:
-        m=df[df["Symbol"].astype(str)==str(top3[0]["symbol"])]
-        if not m.empty:
-            row=m.iloc[0];featured={"symbol":row.get("Symbol",""),"company":row.get("CompanyName",""),"score":top3[0]["score"],"category":row.get("Category",""),"diff_pct":top3[0]["diff_pct"],"promo_holding":_clean(row.get("PromoHolding")),"value_cr":_clean(row.get("ValueCr")),"num_buy_txn":int(row.get("NumBuyTxn") or 0)}
-    return dict(cat_breakdown=cat_breakdown,above_ref=above_ref,below_ref=below_ref,total=total,score_avg=score_avg,top3=top3,featured=featured)
+    conviction=_strongest_conviction_rows(df)
+    conviction_candidates=[]
+    for _,row in conviction.head(5).iterrows():
+        gross_cr=float(row.get("MarketBuyValue") or 0)/1e7
+        net_cr=max(float(row.get("NetBuyValue") or 0),0)/1e7
+        mc=float(row.get("MarketCapCr") or 0)
+        conviction_candidates.append({
+            "symbol":row.get("Symbol",""),
+            "company":row.get("CompanyName",""),
+            "score":int(row.get("Score")) if pd.notna(row.get("Score")) else None,
+            "category":row.get("Category",""),
+            "cmp_vs_promoter_avg_pct":round(float(row.get("CMPvsPromoterAvgPct")),1),
+            "promo_holding":_clean(row.get("PromoHolding")),
+            "gross_buy_cr":round(gross_cr,2),
+            "net_buy_cr":round(net_cr,2),
+            "gross_buy_mcap_pct":round(gross_cr/mc*100,3) if mc>0 else None,
+            "net_buy_mcap_pct":round(net_cr/mc*100,3) if mc>0 else None,
+            "days_since_last_buy":int(row.get("DaysSinceLastBuy")),
+        })
+    if conviction_candidates:
+        row=conviction.iloc[0]
+        featured={
+            "symbol":row.get("Symbol",""),
+            "company":row.get("CompanyName",""),
+            "score":int(row.get("Score")) if pd.notna(row.get("Score")) else None,
+            "category":row.get("Category",""),
+            "diff_pct":round(float(row.get("PriceDiffPct") or 0),1),
+            "promo_holding":_clean(row.get("PromoHolding")),
+            "value_cr":round(float(row.get("MarketBuyValue") or 0)/1e7,2),
+            "num_buy_txn":int(row.get("NumBuyTxn") or 0),
+            "net_buy_mcap_pct":conviction_candidates[0]["net_buy_mcap_pct"],
+            "gross_buy_mcap_pct":conviction_candidates[0]["gross_buy_mcap_pct"],
+            "days_since_last_buy":conviction_candidates[0]["days_since_last_buy"],
+            "cmp_vs_promoter_avg_pct":conviction_candidates[0]["cmp_vs_promoter_avg_pct"],
+        }
+    return dict(cat_breakdown=cat_breakdown,above_ref=above_ref,below_ref=below_ref,total=total,score_avg=score_avg,top3=top3,featured=featured,conviction_candidates=conviction_candidates)
 @app.route("/")
 def index():
     dates=_scan_dates();total_scans=len(dates);total_shortlist=sum(d["shortlist"] for d in dates);latest=dates[0] if dates else None;latest_stats=_latest_stats(latest["date_str"]) if latest else {}
