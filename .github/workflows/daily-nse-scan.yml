@@ -128,6 +128,38 @@ jobs:
 
           python scripts/build_snapshot.py "${GITHUB_WORKSPACE}/output/${RUN_DATE}"
 
+          # Inject the benchmark explicitly from the published research CSV.
+          # This keeps the benchmark contract independent of snapshot builder versioning.
+          python - <<'PY'
+          import csv, json, os
+          from pathlib import Path
+          run_date = os.environ["RUN_DATE"]
+          source = Path(os.environ["GITHUB_WORKSPACE"]) / "output" / run_date / "nifty50_history.csv"
+          rows = []
+          with source.open("r", encoding="utf-8-sig", newline="") as f:
+              for row in csv.DictReader(f):
+                  if not row.get("Date") or not row.get("Close"):
+                      continue
+                  try:
+                      rows.append({"date": row["Date"], "open": round(float(row["Open"]), 2) if row.get("Open") else None, "high": round(float(row["High"]), 2) if row.get("High") else None, "low": round(float(row["Low"]), 2) if row.get("Low") else None, "close": round(float(row["Close"]), 2)})
+                  except (TypeError, ValueError):
+                      continue
+          if not rows:
+              raise SystemExit("NIFTY 50 benchmark CSV is empty; refusing to publish empty benchmark data.")
+          rows.sort(key=lambda x: x["date"])
+          updated = 0
+          for path in Path("data/history").glob("*.json"):
+              try:
+                  payload = json.loads(path.read_text(encoding="utf-8"))
+                  history = payload.setdefault("history", {})
+                  history["benchmark"] = {"name": "NIFTY 50", "price": rows}
+                  path.write_text(json.dumps(payload, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
+                  updated += 1
+              except (OSError, json.JSONDecodeError) as exc:
+                  raise SystemExit(f"Failed to inject NIFTY benchmark into {path}: {exc}")
+          print(f"NIFTY 50 benchmark injected: {len(rows)} sessions into {updated} stock histories.")
+          PY
+
           # Merge historical chart series with the previous published snapshot.
           # Current rows win for duplicate dates; previous rows fill gaps. This
           # handles both a total outage (new series empty) and a partial outage
