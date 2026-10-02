@@ -206,7 +206,10 @@ jobs:
               new_benchmark = (current_history.get("benchmark") or {}).get("price") or []
               merged_price = merge_by_date(old_price, new_price)
               merged_cost = merge_by_date(old_cost, new_cost)
-              merged_benchmark = merge_by_date(old_benchmark, new_benchmark)
+              # NIFTY 50 benchmark is a freshly rebuilt latest-100-session dataset.
+              # Do not merge it with the previous snapshot, otherwise stale
+              # benchmark rows can survive and extend the series beyond 100 sessions.
+              merged_benchmark = new_benchmark
               if len(merged_price) > len(new_price):
                   restored_price += 1
               if len(merged_cost) > len(new_cost):
