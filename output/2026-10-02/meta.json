@@ -1,12 +1,12 @@
 {
   "run_date": "2026-10-02",
-  "generated_at": "2026-10-02T08:55:07.808983+00:00",
+  "generated_at": "2026-10-02T13:10:45.070827+00:00",
   "status": "success",
   "filing_period": "3M",
-  "raw_filings": 3380,
+  "raw_filings": 3381,
   "failed_urls": 0,
   "candidates": 104,
   "shortlisted": 49,
-  "duration_s": 557,
+  "duration_s": 648,
   "pipeline_version": "1.3.4"
 }
