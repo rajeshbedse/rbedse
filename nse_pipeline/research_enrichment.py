@@ -141,6 +141,7 @@ def build_market_price_history(
         "User-Agent": USER_AGENT,
         "Accept": "*/*",
         "Referer": "https://www.nseindia.com/",
+        "X-Requested-With": "XMLHttpRequest",
     })
     rows: list[dict] = []
     attempted = 0
@@ -172,10 +173,12 @@ def build_market_price_history(
 # ---------------------------------------------------------------------------
 # NIFTY 50 benchmark history
 # ---------------------------------------------------------------------------
-def build_nifty50_history(as_of_date: date, out_path: Path, lookback_days: int = 380) -> int:
+def build_nifty50_history(as_of_date: date, out_path: Path, lookback_days: int = 360) -> int:
     """Download daily NIFTY 50 OHLC from NSE's historical index endpoint."""
+    # NSE historical-index requests are bounded to roughly one year; the chart
+    # only needs the latest 100 trading sessions, so keep a safe sub-year window.
     end_date = as_of_date
-    start_date = as_of_date - timedelta(days=max(1, lookback_days))
+    start_date = as_of_date - timedelta(days=min(360, max(1, lookback_days)))
     session = requests.Session()
     session.headers.update({
         "User-Agent": USER_AGENT,
@@ -200,13 +203,14 @@ def build_nifty50_history(as_of_date: date, out_path: Path, lookback_days: int =
             timeout=30,
         )
         if response.status_code != 200:
-            log.warning("NIFTY 50 historical index request returned HTTP %s", response.status_code)
+            log.warning("NIFTY 50 historical index request returned HTTP %s: %s", response.status_code, response.text[:180].replace("\\n", " "))
             return 0
         payload = response.json()
         data = payload.get("data") if isinstance(payload, dict) else payload
         if isinstance(data, dict):
             data = data.get("indexCloseOnlineRecords") or data.get("records") or []
         if not isinstance(data, list):
+            log.warning("NIFTY 50 historical index response had unexpected data shape: %s", type(data).__name__)
             return 0
         for item in data:
             if not isinstance(item, dict):
