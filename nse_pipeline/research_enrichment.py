@@ -5,6 +5,7 @@ any existing pipeline output. It creates additional, independently consumable
 files beside enriched_full.csv:
 
 - market_price_history.csv      daily OHLCV history for shortlisted symbols
+- nifty50_history.csv            daily NIFTY 50 OHLC benchmark history
 - promoter_activity.csv         promoter/entity level activity summary
 - promoter_holding_history.csv transaction-level holding history
 - company_classification.csv    NSE macro/sector/industry/basic-industry
