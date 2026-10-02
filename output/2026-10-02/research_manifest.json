@@ -6,6 +6,7 @@
   "files": {
     "enriched_full": "enriched_full.csv",
     "market_price_history": "market_price_history.csv",
+    "nifty50_history": "nifty50_history.csv",
     "promoter_cost_history": "promoter_cost_history.csv",
     "promoter_activity": "promoter_activity.csv",
     "promoter_holding_history": "promoter_holding_history.csv",
@@ -15,6 +16,7 @@
   "counts": {
     "symbols": 49,
     "price_history_rows": 11818,
+    "nifty50_history_rows": 0,
     "promoter_activity_rows": 435,
     "promoter_holding_history_rows": 357,
     "company_classification_rows": 49,
