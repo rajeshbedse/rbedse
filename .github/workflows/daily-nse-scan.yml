@@ -168,22 +168,26 @@ jobs:
               previous_history = previous.get("history") or {}
               old_price = previous_history.get("price") or []
               old_cost = previous_history.get("promoter_cost") or []
+              old_benchmark = (previous_history.get("benchmark") or {}).get("price") or []
               new_price = current_history.get("price") or []
               new_cost = current_history.get("promoter_cost") or []
+              new_benchmark = (current_history.get("benchmark") or {}).get("price") or []
               merged_price = merge_by_date(old_price, new_price)
               merged_cost = merge_by_date(old_cost, new_cost)
+              merged_benchmark = merge_by_date(old_benchmark, new_benchmark)
               if len(merged_price) > len(new_price):
                   restored_price += 1
               if len(merged_cost) > len(new_cost):
                   restored_cost += 1
-              if merged_price != new_price or merged_cost != new_cost:
+              if merged_price != new_price or merged_cost != new_cost or merged_benchmark != new_benchmark:
                   current_history["price"] = merged_price
                   current_history["promoter_cost"] = merged_cost
+                  current_history["benchmark"] = {"name": "NIFTY 50", "price": merged_benchmark}
                   current["history"] = current_history
                   current_file.write_text(json.dumps(current, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
                   merged_symbols += 1
 
-          print(f"Historical series protected: {merged_symbols} symbols; price restored/filled for {restored_price}, promoter cost for {restored_cost}.")
+          print(f"Historical series protected: {merged_symbols} symbols; price restored/filled for {restored_price}, promoter cost for {restored_cost}; NIFTY 50 benchmark preserved/filled.")
           PY
 
           python scripts/augment_risk.py "${GITHUB_WORKSPACE}/output/${RUN_DATE}" data
