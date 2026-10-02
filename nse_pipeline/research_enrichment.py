@@ -174,9 +174,12 @@ def build_market_price_history(
 # NIFTY 50 benchmark history
 # ---------------------------------------------------------------------------
 def build_nifty50_history(as_of_date: date, out_path: Path, lookback_days: int = 360) -> int:
-    """Download daily NIFTY 50 OHLC from NSE's historical index endpoint."""
-    # NSE historical-index requests are bounded to roughly one year; the chart
-    # only needs the latest 100 trading sessions, so keep a safe sub-year window.
+    """Download daily NIFTY 50 OHLC from NSE's historical index endpoint.
+
+    NSE currently caps the historical-index response to a limited number of
+    records. Request the range in 45-day chunks so the latest sessions are not
+    silently truncated to the oldest part of the requested window.
+    """
     end_date = as_of_date
     start_date = as_of_date - timedelta(days=min(360, max(1, lookback_days)))
     session = requests.Session()
@@ -185,65 +188,78 @@ def build_nifty50_history(as_of_date: date, out_path: Path, lookback_days: int =
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://www.nseindia.com/",
+        "X-Requested-With": "XMLHttpRequest",
     })
     rows: list[dict] = []
+
     try:
-        # Establish the NSE session first; the historical index endpoint can
-        # otherwise return an anti-bot response even for a valid request.
         bootstrap = session.get("https://www.nseindia.com/report-detail/eq_security", timeout=20)
         if bootstrap.status_code >= 400:
             log.warning("NIFTY 50 bootstrap returned HTTP %s", bootstrap.status_code)
-        response = session.get(
-            "https://www.nseindia.com/api/historicalOR/indicesHistory",
-            params={
-                "indexType": "NIFTY 50",
-                "from": start_date.strftime("%d-%m-%Y"),
-                "to": end_date.strftime("%d-%m-%Y"),
-            },
-            timeout=30,
-        )
-        if response.status_code != 200:
-            log.warning("NIFTY 50 historical index request returned HTTP %s: %s", response.status_code, response.text[:180].replace("\\n", " "))
-            return 0
-        payload = response.json()
-        data = payload.get("data") if isinstance(payload, dict) else payload
-        if isinstance(data, dict):
-            data = data.get("indexCloseOnlineRecords") or data.get("records") or []
-        if not isinstance(data, list):
-            log.warning("NIFTY 50 historical index response had unexpected data shape: %s", type(data).__name__)
-            return 0
-        for item in data:
-            if not isinstance(item, dict):
+
+        chunk_start = start_date
+        while chunk_start <= end_date:
+            chunk_end = min(chunk_start + timedelta(days=44), end_date)
+            response = session.get(
+                "https://www.nseindia.com/api/historicalOR/indicesHistory",
+                params={
+                    "indexType": "NIFTY 50",
+                    "from": chunk_start.strftime("%d-%m-%Y"),
+                    "to": chunk_end.strftime("%d-%m-%Y"),
+                },
+                timeout=30,
+            )
+            if response.status_code != 200:
+                log.warning(
+                    "NIFTY 50 historical request %s to %s returned HTTP %s: %s",
+                    chunk_start, chunk_end, response.status_code,
+                    response.text[:180].replace("\n", " "),
+                )
+                chunk_start = chunk_end + timedelta(days=1)
                 continue
-            raw_date = str(item.get("EOD_TIMESTAMP") or item.get("TIMESTAMP") or "").strip()
-            try:
+
+            payload = response.json()
+            data = payload.get("data") if isinstance(payload, dict) else payload
+            if isinstance(data, dict):
+                data = data.get("indexCloseOnlineRecords") or data.get("records") or []
+            if not isinstance(data, list):
+                log.warning("NIFTY 50 response had unexpected data shape: %s", type(data).__name__)
+                chunk_start = chunk_end + timedelta(days=1)
+                continue
+
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                raw_date = str(item.get("EOD_TIMESTAMP") or item.get("TIMESTAMP") or "").strip()
                 parsed_date = pd.to_datetime(raw_date, dayfirst=True, errors="coerce")
                 if pd.isna(parsed_date):
                     parsed_date = pd.to_datetime(raw_date, errors="coerce")
                 if pd.isna(parsed_date):
                     continue
-                iso_date = parsed_date.date().isoformat()
-            except Exception:
-                continue
-            def value(*keys):
-                for key in keys:
-                    raw = item.get(key)
-                    if raw not in (None, ""):
-                        try:
-                            return float(str(raw).replace(",", ""))
-                        except (TypeError, ValueError):
-                            return None
-                return None
-            close = value("EOD_CLOSE_INDEX_VAL", "CLOSE_INDEX_VAL")
-            if close is None:
-                continue
-            rows.append({
-                "Date": iso_date,
-                "Open": value("EOD_OPEN_INDEX_VAL", "OPEN_INDEX_VAL"),
-                "High": value("EOD_HIGH_INDEX_VAL", "HIGH_INDEX_VAL"),
-                "Low": value("EOD_LOW_INDEX_VAL", "LOW_INDEX_VAL"),
-                "Close": close,
-            })
+
+                def value(*keys):
+                    for key in keys:
+                        raw = item.get(key)
+                        if raw not in (None, ""):
+                            try:
+                                return float(str(raw).replace(",", ""))
+                            except (TypeError, ValueError):
+                                return None
+                    return None
+
+                close = value("EOD_CLOSE_INDEX_VAL", "CLOSE_INDEX_VAL")
+                if close is not None:
+                    rows.append({
+                        "Date": parsed_date.date().isoformat(),
+                        "Open": value("EOD_OPEN_INDEX_VAL", "OPEN_INDEX_VAL"),
+                        "High": value("EOD_HIGH_INDEX_VAL", "HIGH_INDEX_VAL"),
+                        "Low": value("EOD_LOW_INDEX_VAL", "LOW_INDEX_VAL"),
+                        "Close": close,
+                    })
+
+            chunk_start = chunk_end + timedelta(days=1)
+            time.sleep(0.05)
+
     except Exception as exc:
         log.warning("NIFTY 50 historical index fetch failed: %s", exc)
         return 0
