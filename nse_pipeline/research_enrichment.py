@@ -169,6 +169,90 @@ def build_market_price_history(
 
 
 # ---------------------------------------------------------------------------
+# NIFTY 50 benchmark history
+# ---------------------------------------------------------------------------
+def build_nifty50_history(as_of_date: date, out_path: Path, lookback_days: int = 380) -> int:
+    """Download daily NIFTY 50 OHLC from NSE's historical index endpoint."""
+    end_date = as_of_date
+    start_date = as_of_date - timedelta(days=max(1, lookback_days))
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": USER_AGENT,
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.nseindia.com/",
+    })
+    rows: list[dict] = []
+    try:
+        # Establish the NSE session first; the historical index endpoint can
+        # otherwise return an anti-bot response even for a valid request.
+        bootstrap = session.get("https://www.nseindia.com/report-detail/eq_security", timeout=20)
+        if bootstrap.status_code >= 400:
+            log.warning("NIFTY 50 bootstrap returned HTTP %s", bootstrap.status_code)
+        response = session.get(
+            "https://www.nseindia.com/api/historicalOR/indicesHistory",
+            params={
+                "indexType": "NIFTY 50",
+                "from": start_date.strftime("%d-%m-%Y"),
+                "to": end_date.strftime("%d-%m-%Y"),
+            },
+            timeout=30,
+        )
+        if response.status_code != 200:
+            log.warning("NIFTY 50 historical index request returned HTTP %s", response.status_code)
+            return 0
+        payload = response.json()
+        data = payload.get("data") if isinstance(payload, dict) else payload
+        if isinstance(data, dict):
+            data = data.get("indexCloseOnlineRecords") or data.get("records") or []
+        if not isinstance(data, list):
+            return 0
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            raw_date = str(item.get("EOD_TIMESTAMP") or item.get("TIMESTAMP") or "").strip()
+            try:
+                parsed_date = pd.to_datetime(raw_date, dayfirst=True, errors="coerce")
+                if pd.isna(parsed_date):
+                    parsed_date = pd.to_datetime(raw_date, errors="coerce")
+                if pd.isna(parsed_date):
+                    continue
+                iso_date = parsed_date.date().isoformat()
+            except Exception:
+                continue
+            def value(*keys):
+                for key in keys:
+                    raw = item.get(key)
+                    if raw not in (None, ""):
+                        try:
+                            return float(str(raw).replace(",", ""))
+                        except (TypeError, ValueError):
+                            return None
+                return None
+            close = value("EOD_CLOSE_INDEX_VAL", "CLOSE_INDEX_VAL")
+            if close is None:
+                continue
+            rows.append({
+                "Date": iso_date,
+                "Open": value("EOD_OPEN_INDEX_VAL", "OPEN_INDEX_VAL"),
+                "High": value("EOD_HIGH_INDEX_VAL", "HIGH_INDEX_VAL"),
+                "Low": value("EOD_LOW_INDEX_VAL", "LOW_INDEX_VAL"),
+                "Close": close,
+            })
+    except Exception as exc:
+        log.warning("NIFTY 50 historical index fetch failed: %s", exc)
+        return 0
+
+    result = pd.DataFrame(rows, columns=["Date", "Open", "High", "Low", "Close"])
+    if not result.empty:
+        result = result.drop_duplicates(["Date"], keep="last").sort_values("Date")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    result.to_csv(out_path, index=False, encoding="utf-8-sig")
+    log.info("NIFTY 50 benchmark history → %s (%d rows)", out_path, len(result))
+    return len(result)
+
+
+# ---------------------------------------------------------------------------
 # Promoter holding history and entity-level activity
 # ---------------------------------------------------------------------------
 def _prepare_events(csv_path: Path) -> pd.DataFrame:
@@ -337,10 +421,12 @@ def build_research_datasets(
     activity_path = out_dir / "promoter_activity.csv"
     holding_path = out_dir / "promoter_holding_history.csv"
     classification_path = out_dir / "company_classification.csv"
+    nifty_path = out_dir / "nifty50_history.csv"
 
     counts = {
         "symbols": len(symbols),
         "price_history_rows": build_market_price_history(symbols, as_of_date, price_path, price_lookback_days),
+        "nifty50_history_rows": build_nifty50_history(as_of_date, nifty_path, price_lookback_days),
         "promoter_activity_rows": build_promoter_activity(events, symbols, as_of_date, activity_path),
         "promoter_holding_history_rows": build_promoter_holding_history(events, symbols, holding_path),
         "company_classification_rows": build_company_classification(symbols, classification_path),
@@ -355,6 +441,7 @@ def build_research_datasets(
         "files": {
             "enriched_full": full_csv_path.name,
             "market_price_history": price_path.name,
+            "nifty50_history": nifty_path.name,
             "promoter_cost_history": cost_path.name,
             "promoter_activity": activity_path.name,
             "promoter_holding_history": holding_path.name,
