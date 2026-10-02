@@ -173,7 +173,7 @@ def build_market_price_history(
 # ---------------------------------------------------------------------------
 # NIFTY 50 benchmark history
 # ---------------------------------------------------------------------------
-def build_nifty50_history(as_of_date: date, out_path: Path, lookback_days: int = 360) -> int:
+def build_nifty50_history(as_of_date: date, out_path: Path, lookback_days: int = 180) -> int:
     """Download daily NIFTY 50 OHLC from NSE's historical index endpoint.
 
     NSE currently caps the historical-index response to a limited number of
@@ -266,10 +266,10 @@ def build_nifty50_history(as_of_date: date, out_path: Path, lookback_days: int =
 
     result = pd.DataFrame(rows, columns=["Date", "Open", "High", "Low", "Close"])
     if not result.empty:
-        result = result.drop_duplicates(["Date"], keep="last").sort_values("Date")
+        result = result.drop_duplicates(["Date"], keep="last").sort_values("Date").tail(100).reset_index(drop=True)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(out_path, index=False, encoding="utf-8-sig")
-    log.info("NIFTY 50 benchmark history → %s (%d rows)", out_path, len(result))
+    log.info("NIFTY 50 benchmark history → %s (%d rows; latest 100 trading sessions)", out_path, len(result))
     return len(result)
 
 
