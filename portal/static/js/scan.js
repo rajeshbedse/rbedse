@@ -119,8 +119,8 @@
 
         <div class="research-card-evidence">
           <div><span>CMP</span><strong>${money(r.last_price)}</strong></div>
-          <div><span>Reference</span><strong>${money(r.avg_price)}</strong></div>
-          <div><span>vs Reference</span><strong class="${diffCls}">${pct(r.price_diff_pct)}</strong></div>
+          <div><span>Promoter Avg</span><strong>${money(r.promoter_avg_price)}</strong></div>
+          <div><span>CMP vs Promoter Avg</span><strong class="${Number(r.cmp_vs_promoter_avg_pct) < 0 ? "negative" : Number(r.cmp_vs_promoter_avg_pct) > 0 ? "positive" : ""}">${pct(r.cmp_vs_promoter_avg_pct)}</strong></div>
           <div><span>Promoter</span><strong>${r.promo_holding == null ? '—' : num(r.promo_holding) + '%'}</strong></div>
           <div><span>Buying</span><strong>${crMoney(r.value_cr)}</strong></div>
           <div><span>Transactions</span><strong>${r.num_buy_txn || 0}</strong></div>
@@ -137,7 +137,7 @@
   function tableRow(r) {
     const cls = categoryClass(r.category);
     const diffCls = Number(r.price_diff_pct) < 0 ? 'negative' : 'positive';
-    return `<tr class="${r.is_shortlisted ? "is-shortlisted" : ""}"><td><div class="table-stock"><span class="stock-symbol">${esc(r.symbol)}</span><span>${esc(r.company)}</span></div></td><td><div class="table-score-wrap"><span class="table-score ${scoreClass(r.score)}">${r.score ?? '—'}</span>${scoreMeter(r.score, true)}</div></td><td><span class="table-category category-${cls}">${esc(r.category || '—')}</span></td><td>${money(r.last_price)}</td><td>${money(r.avg_price)}</td><td class="${diffCls}">${pct(r.price_diff_pct)}</td><td>${r.promo_holding == null ? '—' : num(r.promo_holding)+'%'}</td><td>${crMoney(r.value_cr)}</td><td>${fmtDate(r.acq_to_dt)}</td><td><button class="view-stock-btn" type="button" data-stock="${esc(r.symbol)}">View →</button></td></tr>`;
+    return `<tr class="${r.is_shortlisted ? "is-shortlisted" : ""}"><td><div class="table-stock"><span class="stock-symbol">${esc(r.symbol)}</span><span>${esc(r.company)}</span></div></td><td><div class="table-score-wrap"><span class="table-score ${scoreClass(r.score)}">${r.score ?? '—'}</span>${scoreMeter(r.score, true)}</div></td><td><span class="table-category category-${cls}">${esc(r.category || '—')}</span></td><td>${money(r.last_price)}</td><td>${money(r.promoter_avg_price)}</td><td class="${Number(r.cmp_vs_promoter_avg_pct) < 0 ? "negative" : Number(r.cmp_vs_promoter_avg_pct) > 0 ? "positive" : ""}">${pct(r.cmp_vs_promoter_avg_pct)}</td><td>${r.promo_holding == null ? '—' : num(r.promo_holding)+'%'}</td><td>${crMoney(r.value_cr)}</td><td>${fmtDate(r.acq_to_dt)}</td><td><button class="view-stock-btn" type="button" data-stock="${esc(r.symbol)}">View →</button></td></tr>`;
   }
 
   function render() {
