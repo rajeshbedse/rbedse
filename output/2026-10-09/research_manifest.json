@@ -15,12 +15,12 @@
   },
   "counts": {
     "symbols": 47,
-    "price_history_rows": 11294,
+    "price_history_rows": 11341,
     "nifty50_history_rows": 100,
     "promoter_activity_rows": 410,
     "promoter_holding_history_rows": 348,
     "company_classification_rows": 47,
-    "promoter_cost_history_rows": 11294,
+    "promoter_cost_history_rows": 11341,
     "final_shortlist": 47
   }
 }
