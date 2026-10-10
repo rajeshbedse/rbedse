@@ -14,13 +14,13 @@
     "ryb_scan": "ryb_scan.csv"
   },
   "counts": {
-    "symbols": 74,
-    "price_history_rows": 17780,
+    "symbols": 47,
+    "price_history_rows": 11301,
     "nifty50_history_rows": 100,
-    "promoter_activity_rows": 870,
-    "promoter_holding_history_rows": 589,
-    "company_classification_rows": 74,
-    "promoter_cost_history_rows": 17780,
-    "final_shortlist": 74
+    "promoter_activity_rows": 410,
+    "promoter_holding_history_rows": 348,
+    "company_classification_rows": 47,
+    "promoter_cost_history_rows": 11301,
+    "final_shortlist": 47
   }
 }
