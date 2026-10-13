@@ -15,14 +15,14 @@
     "exclusion_report": "exclusion_report.csv"
   },
   "counts": {
-    "symbols": 47,
-    "price_history_rows": 11355,
+    "symbols": 81,
+    "price_history_rows": 19676,
     "nifty50_history_rows": 100,
-    "promoter_activity_rows": 405,
-    "promoter_holding_history_rows": 347,
-    "company_classification_rows": 47,
-    "promoter_cost_history_rows": 11355,
-    "final_shortlist": 47,
-    "excluded_candidates": 56
+    "promoter_activity_rows": 810,
+    "promoter_holding_history_rows": 588,
+    "company_classification_rows": 81,
+    "promoter_cost_history_rows": 19676,
+    "final_shortlist": 81,
+    "excluded_candidates": 22
   }
 }
