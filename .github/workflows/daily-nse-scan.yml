@@ -107,6 +107,39 @@ jobs:
           git clone --depth 1 "https://x-access-token:${RYB_REPO_TOKEN}@github.com/rajeshbedse/RYB.git" /tmp/RYB
           cd /tmp/RYB
 
+          # Publish the exclusion report beside the RYB v3 data contract.
+          EXCLUSION_SOURCE="${GITHUB_WORKSPACE}/output/${RUN_DATE}/exclusion_report.csv"
+          if [ ! -s "${EXCLUSION_SOURCE}" ]; then
+            echo "::error::Exclusion report missing for ${RUN_DATE}: ${EXCLUSION_SOURCE}"
+            exit 1
+          fi
+          cp "${EXCLUSION_SOURCE}" data/exclusion_report.csv
+          python - <<'PY'
+          import csv
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          run_date = os.environ["RUN_DATE"]
+          report = Path("data/exclusion_report.csv")
+          with report.open("r", encoding="utf-8-sig", newline="") as handle:
+              rows = list(csv.DictReader(handle))
+          if rows and not {"Symbol", "ExclusionReason"}.issubset(rows[0]):
+              raise SystemExit("Exclusion report is missing required Symbol/ExclusionReason columns")
+          meta = {
+              "report_date": run_date,
+              "source_repo": "rajeshbedse/rbedse",
+              "source_path": f"output/{run_date}/exclusion_report.csv",
+              "updated_at_utc": datetime.now(timezone.utc).isoformat(),
+              "excluded_count": len(rows),
+          }
+          Path("data/exclusion_report_meta.json").write_text(
+              json.dumps(meta, indent=2) + "\n", encoding="utf-8"
+          )
+          print(f"Published exclusion report for {run_date}: {len(rows)} excluded candidates")
+          PY
+
           # Preserve the last known-good historical chart data before the
           # current snapshot is rebuilt. A transient NSE/Yahoo history outage
           # must never replace populated price/cost history with empty arrays.
