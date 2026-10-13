@@ -172,7 +172,7 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
             )
             log.info("Historical price fallback populated %d rows; promoter cost series rebuilt", fallback_rows)
 
-        activity_rows = rebuild_promoter_activity_windows(csv_path, final["Symbol"].astype(str).tolist(), as_of, run_dir / "promoter_activity.csv")
+        activity_rows = rebuild_promoter_activity_windows(csv_path, research_symbols, as_of, run_dir / "promoter_activity.csv")
         research_manifest.setdefault("files", {})["ryb_scan"] = ryb_scan_csv.name
         research_manifest.setdefault("files", {})["enriched_full"] = full_csv.name
         research_manifest.setdefault("files", {})["exclusion_report"] = "exclusion_report.csv"
