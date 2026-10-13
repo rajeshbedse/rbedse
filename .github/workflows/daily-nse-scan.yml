@@ -135,7 +135,7 @@ jobs:
               "excluded_count": len(rows),
           }
           Path("data/exclusion_report_meta.json").write_text(
-              json.dumps(meta, indent=2) + "\\n", encoding="utf-8"
+              json.dumps(meta, indent=2) + "\n", encoding="utf-8"
           )
           print(f"Published exclusion report for {run_date}: {len(rows)} excluded candidates")
           PY
