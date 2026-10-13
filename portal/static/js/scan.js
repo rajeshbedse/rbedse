@@ -80,8 +80,8 @@
     let rows = state.rows.slice();
     const q = state.search.toLowerCase();
     if (q) rows = rows.filter(r => `${r.symbol} ${r.company}`.toLowerCase().includes(q));
-    if (state.band !== 'all') rows = rows.filter(r => state.band === 'below' ? r.price_diff_pct < 0 : r.band === state.band);
-    if (state.category !== 'all') rows = rows.filter(r => r.category === state.category);
+    if (state.view !== 'excluded' && state.band !== 'all') rows = rows.filter(r => state.band === 'below' ? r.price_diff_pct < 0 : r.band === state.band);
+    if (state.view !== 'excluded' && state.category !== 'all') rows = rows.filter(r => r.category === state.category);
     const [field, direction] = state.sort.split('-');
     rows.sort((a, b) => {
       let av, bv;
@@ -140,17 +140,33 @@
     return `<tr class="${r.is_shortlisted ? "is-shortlisted" : ""}"><td><div class="table-stock"><span class="stock-symbol">${esc(r.symbol)}</span><span>${esc(r.company)}</span></div></td><td><div class="table-score-wrap"><span class="table-score ${scoreClass(r.score)}">${r.score ?? '—'}</span>${scoreMeter(r.score, true)}</div></td><td><span class="table-category category-${cls}">${esc(r.category || '—')}</span></td><td>${money(r.last_price)}</td><td>${money(r.promoter_avg_price)}</td><td class="${Number(r.cmp_vs_promoter_avg_pct) < 0 ? "negative" : Number(r.cmp_vs_promoter_avg_pct) > 0 ? "positive" : ""}">${pct(r.cmp_vs_promoter_avg_pct)}</td><td>${r.promo_holding == null ? '—' : num(r.promo_holding)+'%'}</td><td>${crMoney(r.value_cr)}</td><td>${fmtDate(r.acq_to_dt)}</td><td><button class="view-stock-btn" type="button" data-stock="${esc(r.symbol)}">View →</button></td></tr>`;
   }
 
+  function exclusionCard(r) {
+    return `<article class="stock-card research-card exclusion-card">
+      <div class="research-card-main">
+        <div class="research-card-head"><div class="research-card-identity"><div class="research-card-symbol">${esc(r.symbol)}</div><div class="stock-company">${esc(r.company)}</div></div>
+        <div class="research-card-decision"><span class="table-category category-avoid">Excluded</span></div></div>
+        <div class="research-card-evidence"><div><span>Buy value</span><strong>${crMoney(r.value_cr)}</strong></div><div><span>Promoter holding</span><strong>${r.promo_holding == null ? '—' : num(r.promo_holding)+'%'}</strong></div><div><span>CMP</span><strong>${money(r.last_price)}</strong></div><div><span>Market cap</span><strong>${crMoney(r.market_cap_cr)}</strong></div><div><span>Latest buying</span><strong>${fmtDate(r.acq_to_dt)}</strong></div></div>
+        <div class="research-card-footer"><span><strong>Reason:</strong> ${esc(r.exclusion_reason || 'Eligibility exclusion')}</span></div>
+      </div>
+    </article>`;
+  }
+
   function render() {
     const rows = visibleRows();
     $('#scan-error').hidden = true;
-    $('#result-count').textContent = `${rows.length} stock${rows.length === 1 ? '' : 's'}`;
+    $('#result-count').textContent = `${rows.length} ${state.view === 'excluded' ? 'excluded candidate' : 'stock'}${rows.length === 1 ? '' : 's'}`;
     $('#result-note').textContent = rows.length !== state.rows.length ? ` · ${state.rows.length} total` : '';
-    $('#stock-cards').innerHTML = rows.map(stockCard).join('');
-    $('#scan-tbody').innerHTML = rows.map(tableRow).join('');
+    if (state.view === 'excluded') {
+      $('#stock-cards').innerHTML = rows.map(exclusionCard).join('');
+      $('#scan-tbody').innerHTML = '';
+    } else {
+      $('#stock-cards').innerHTML = rows.map(stockCard).join('');
+      $('#scan-tbody').innerHTML = rows.map(tableRow).join('');
+      $('#stock-cards [data-stock], #scan-tbody [data-stock]').forEach(b => b.addEventListener('click', () => openDetail(b.dataset.stock)));
+    }
     $('#scan-empty').hidden = rows.length !== 0;
     $('#stock-cards').hidden = rows.length === 0;
-    $('.desktop-table-wrap').hidden = rows.length === 0;
-    $$('#stock-cards [data-stock], #scan-tbody [data-stock]').forEach(b => b.addEventListener('click', () => openDetail(b.dataset.stock)));
+    $('.desktop-table-wrap').hidden = rows.length === 0 || state.view === 'excluded';
     updateFilterCount();
   }
 
