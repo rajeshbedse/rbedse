@@ -628,6 +628,12 @@ def _apply_timing_metrics(df, csv_path, as_of_date):
 def run(csv_path: Path, full_csv_path: Path, as_of_date: date | None = None):
     agg, pledge_syms, sell_syms = _build_aggregates(csv_path)
     agg["HasPledging"] = agg["Symbol"].isin(pledge_syms)
+    # Preserve excluded pledge candidates so the daily output can explain every
+    # eligibility decision instead of silently dropping symbols.
+    pledge_exclusions = agg[agg["HasPledging"]].copy()
+    if not pledge_exclusions.empty:
+        pledge_exclusions["EligibilityStatus"] = "Excluded"
+        pledge_exclusions["ExclusionReason"] = "Promoter pledge creation/invocation detected"
     # v2 keeps promoter selling in the candidate universe so it can reduce the
     # score/rank through net-flow and risk signals instead of silently removing
     # the stock. Pledge creation/invocation remains an eligibility exclusion.
@@ -664,10 +670,43 @@ def run(csv_path: Path, full_csv_path: Path, as_of_date: date | None = None):
     ).reset_index(drop=True)
     agg_clean["Rank"] = range(1, len(agg_clean) + 1)
 
+    # Record the eligibility decision and a human-readable reason for every
+    # candidate. Missing source data is kept distinct from a failed threshold.
+    price_numeric = pd.to_numeric(agg_clean["LastPrice"], errors="coerce")
+    holding_numeric = pd.to_numeric(agg_clean["PromoHolding"], errors="coerce")
+    exclusion_reasons = []
+    for has_price, holding in zip(price_numeric.notna(), holding_numeric):
+        reasons = []
+        if not has_price:
+            reasons.append("Closing price unavailable")
+        if pd.isna(holding):
+            reasons.append("Promoter holding unavailable")
+        elif holding < MIN_PROMO_HOLDING:
+            reasons.append(f"Promoter holding {holding:.2f}% below minimum {MIN_PROMO_HOLDING:.0f}%")
+        exclusion_reasons.append("; ".join(reasons))
+    agg_clean["ExclusionReason"] = exclusion_reasons
+    agg_clean["EligibilityStatus"] = agg_clean["ExclusionReason"].eq("").map(
+        {True: "Eligible", False: "Excluded"}
+    )
+
     full_csv_path.parent.mkdir(parents=True,exist_ok=True)
     agg_clean.to_csv(full_csv_path,index=False,encoding="utf-8-sig")
-    valid = agg_clean.dropna(subset=["LastPrice","PromoHolding"])
-    valid = valid[valid["PromoHolding"] >= MIN_PROMO_HOLDING].copy()
+
+    # Dedicated daily artifact: includes both pledge exclusions and candidates
+    # excluded after enrichment, with the exact reason and available metrics.
+    excluded = agg_clean[agg_clean["EligibilityStatus"] == "Excluded"].copy()
+    exclusion_report = pd.concat([pledge_exclusions, excluded], ignore_index=True, sort=False)
+    if not exclusion_report.empty:
+        exclusion_report = exclusion_report.sort_values(
+            "PricedValuePurchased" if "PricedValuePurchased" in exclusion_report.columns else "ValuePurchased",
+            ascending=False,
+            kind="stable",
+        )
+    exclusion_report.to_csv(
+        full_csv_path.parent / "exclusion_report.csv", index=False, encoding="utf-8-sig"
+    )
+
+    valid = agg_clean[agg_clean["EligibilityStatus"] == "Eligible"].copy()
     # Re-rank after the minimum holding filter so Rank is the actual displayed
     # shortlist rank rather than a rank inherited from the wider candidate set.
     valid = valid.sort_values(
