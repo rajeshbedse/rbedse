@@ -11,7 +11,8 @@
     "promoter_activity": "promoter_activity.csv",
     "promoter_holding_history": "promoter_holding_history.csv",
     "company_classification": "company_classification.csv",
-    "ryb_scan": "ryb_scan.csv"
+    "ryb_scan": "ryb_scan.csv",
+    "exclusion_report": "exclusion_report.csv"
   },
   "counts": {
     "symbols": 47,
@@ -21,6 +22,7 @@
     "promoter_holding_history_rows": 347,
     "company_classification_rows": 47,
     "promoter_cost_history_rows": 11355,
-    "final_shortlist": 47
+    "final_shortlist": 47,
+    "excluded_candidates": 56
   }
 }
