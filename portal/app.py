@@ -55,6 +55,8 @@ def _load_filtered(date_str):
     p=OUTPUT_DIR/date_str/"enriched_analysis.xlsx"; return _cached_excel(str(p),_file_mtime(p)) if p.exists() else None
 def _load_full(date_str):
     p=OUTPUT_DIR/date_str/"enriched_full.csv"; return _cached_csv(str(p),_file_mtime(p)) if p.exists() else None
+def _load_exclusions(date_str):
+    p=OUTPUT_DIR/date_str/"exclusion_report.csv"; return _cached_csv(str(p),_file_mtime(p)) if p.exists() else None
 def _load_meta(date_str):
     p=OUTPUT_DIR/date_str/"meta.json"; return _cached_meta(str(p),_file_mtime(p)) if p.exists() else None
 @lru_cache(maxsize=64)
@@ -224,11 +226,28 @@ def _validate_scan_date(date_str):
     return dt
 @app.route("/scan/<date_str>")
 def scan_detail(date_str):
-    dt=_validate_scan_date(date_str);df_filtered=_load_filtered(date_str);df_full=_load_full(date_str)
-    return render_template("scan.html",date_str=date_str,display_date=dt.strftime("%d %b %Y"),weekday=dt.strftime("%A"),shortlist_count=len(df_filtered) if df_filtered is not None else 0,reviewed_count=len(df_full) if df_full is not None else 0)
+    dt=_validate_scan_date(date_str);df_filtered=_load_filtered(date_str);df_full=_load_full(date_str);df_excluded=_load_exclusions(date_str)
+    return render_template("scan.html",date_str=date_str,display_date=dt.strftime("%d %b %Y"),weekday=dt.strftime("%A"),shortlist_count=len(df_filtered) if df_filtered is not None else 0,reviewed_count=len(df_full) if df_full is not None else 0,excluded_count=len(df_excluded) if df_excluded is not None else 0)
 @app.get("/api/scan/<date_str>/summary")
 def scan_summary(date_str):
     _validate_scan_date(date_str);view=request.args.get("view","shortlist")
+    if view=="excluded":
+        df=_load_exclusions(date_str)
+        rows=[]
+        if df is not None and not df.empty:
+            for r in df.to_dict(orient="records"):
+                rows.append({
+                    "symbol":r.get("Symbol",""),
+                    "company":r.get("CompanyName",""),
+                    "exclusion_reason":r.get("ExclusionReason","Eligibility exclusion"),
+                    "value_cr":_clean(r.get("ValueCr")),
+                    "promo_holding":_clean(r.get("PromoHolding")),
+                    "last_price":_clean(r.get("LastPrice")),
+                    "market_cap_cr":_clean(r.get("MarketCapCr")),
+                    "num_buy_txn":_clean(r.get("NumBuyTxn")),
+                    "acq_to_dt":r.get("acqtoDt",""),
+                })
+        return jsonify({"date":date_str,"view":view,"rows":rows})
     if view=="candidates":
         full_df=_load_full(date_str);shortlist_df=_load_filtered(date_str);rows=_summary_rows(full_df,include_flags=True);shortlisted_symbols=set()
         if shortlist_df is not None and not shortlist_df.empty and "Symbol" in shortlist_df.columns:shortlisted_symbols=set(shortlist_df["Symbol"].astype(str).str.upper())
