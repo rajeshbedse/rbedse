@@ -129,7 +129,22 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
     log.info("RYB canonical scan → %s (%d shortlisted symbols)", ryb_scan_csv, len(final))
 
     try:
-        research_manifest = build_research_datasets(csv_path, ryb_scan_csv, run_dir, as_of_date=as_of)
+        # Research history must cover the full enriched universe and explicit
+        # exclusion report, not just the shortlist CSV. The shortlist remains
+        # the only input to the scoring/snapshot summary.
+        research_symbols = (
+            pd.read_csv(full_csv, encoding="utf-8-sig").get("Symbol", pd.Series(dtype=str))
+            .dropna().astype(str).str.strip().str.upper().tolist()
+        )
+        exclusion_path = run_dir / "exclusion_report.csv"
+        if exclusion_path.exists():
+            excluded_symbols = (
+                pd.read_csv(exclusion_path, encoding="utf-8-sig").get("Symbol", pd.Series(dtype=str))
+                .dropna().astype(str).str.strip().str.upper().tolist()
+            )
+            research_symbols = list(dict.fromkeys([s for s in research_symbols + excluded_symbols if s]))
+
+        research_manifest = build_research_datasets(csv_path, full_csv, run_dir, as_of_date=as_of)
 
         # NSE's historical equity archive is currently returning no usable
         # historical rows for the research dataset. Keep the primary NSE path
@@ -137,7 +152,7 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
         # rows. This does not affect the scan, scoring, or shortlist.
         if int(research_manifest.get("counts", {}).get("price_history_rows", 0) or 0) == 0:
             fallback_rows = build_yahoo_price_history(
-                final["Symbol"].astype(str).tolist(),
+                research_symbols,
                 as_of,
                 run_dir / "market_price_history.csv",
             )
@@ -157,7 +172,7 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
             )
             log.info("Historical price fallback populated %d rows; promoter cost series rebuilt", fallback_rows)
 
-        activity_rows = rebuild_promoter_activity_windows(csv_path, final["Symbol"].astype(str).tolist(), as_of, run_dir / "promoter_activity.csv")
+        activity_rows = rebuild_promoter_activity_windows(csv_path, research_symbols, as_of, run_dir / "promoter_activity.csv")
         research_manifest.setdefault("files", {})["ryb_scan"] = ryb_scan_csv.name
         research_manifest.setdefault("files", {})["enriched_full"] = full_csv.name
         research_manifest.setdefault("files", {})["exclusion_report"] = "exclusion_report.csv"
