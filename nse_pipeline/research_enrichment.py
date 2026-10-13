@@ -434,7 +434,24 @@ def build_research_datasets(
 ) -> dict:
     """Build all additive datasets and return a compact manifest."""
     enriched = pd.read_csv(full_csv_path, encoding="utf-8-sig")
-    symbols = enriched.get("Symbol", pd.Series(dtype=str)).dropna().astype(str).str.upper().drop_duplicates().tolist()
+    symbols = enriched.get("Symbol", pd.Series(dtype=str)).dropna().astype(str).str.strip().str.upper().drop_duplicates().tolist()
+
+    # Excluded candidates can be absent from enriched_full.csv because that file
+    # is an analysis universe rather than the complete exclusion-report universe.
+    # Include every reported exclusion in the additive research datasets too,
+    # so RYB can publish detail/history payloads for manual review.
+    exclusion_path = out_dir / "exclusion_report.csv"
+    if exclusion_path.exists():
+        try:
+            exclusions = pd.read_csv(exclusion_path, encoding="utf-8-sig")
+            excluded_symbols = (
+                exclusions.get("Symbol", pd.Series(dtype=str))
+                .dropna().astype(str).str.strip().str.upper().tolist()
+            )
+            symbols = list(dict.fromkeys([s for s in symbols + excluded_symbols if s]))
+        except (OSError, ValueError, pd.errors.ParserError) as exc:
+            log.warning("Could not read exclusion report for research-history coverage: %s", exc)
+
     events = _prepare_events(csv_path)
 
     price_path = out_dir / "market_price_history.csv"
