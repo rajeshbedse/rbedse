@@ -160,7 +160,14 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
         activity_rows = rebuild_promoter_activity_windows(csv_path, final["Symbol"].astype(str).tolist(), as_of, run_dir / "promoter_activity.csv")
         research_manifest.setdefault("files", {})["ryb_scan"] = ryb_scan_csv.name
         research_manifest.setdefault("files", {})["enriched_full"] = full_csv.name
+        research_manifest.setdefault("files", {})["exclusion_report"] = "exclusion_report.csv"
         research_manifest.setdefault("counts", {})["final_shortlist"] = len(final)
+        try:
+            research_manifest.setdefault("counts", {})["excluded_candidates"] = len(
+                pd.read_csv(run_dir / "exclusion_report.csv", encoding="utf-8-sig")
+            )
+        except Exception:
+            research_manifest.setdefault("counts", {})["excluded_candidates"] = 0
         research_manifest.setdefault("counts", {})["promoter_activity_rows"] = activity_rows
         (run_dir / "research_manifest.json").write_text(json.dumps(research_manifest, indent=2), encoding="utf-8")
     except Exception as exc:
@@ -172,7 +179,11 @@ def run(skip_phase1: bool = False, run_date: str | None = None, dry_run: bool = 
         candidates = len(pd.read_csv(full_csv, encoding="utf-8-sig"))
     except Exception:
         candidates = 0
-    meta = {"run_date": date_str, "generated_at": datetime.now(timezone.utc).isoformat(), "status": "success", "filing_period": NSE_FILING_PERIOD, "raw_filings": raw_count, "failed_urls": 0, "candidates": candidates, "shortlisted": len(final), "duration_s": duration, "pipeline_version": __version__}
+    try:
+        excluded_candidates = len(pd.read_csv(run_dir / "exclusion_report.csv", encoding="utf-8-sig"))
+    except Exception:
+        excluded_candidates = 0
+    meta = {"run_date": date_str, "generated_at": datetime.now(timezone.utc).isoformat(), "status": "success", "filing_period": NSE_FILING_PERIOD, "raw_filings": raw_count, "failed_urls": 0, "candidates": candidates, "shortlisted": len(final), "excluded_candidates": excluded_candidates, "duration_s": duration, "pipeline_version": __version__}
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     log.info("meta.json → %s", meta_path)
     log.info("\nPipeline complete.  Duration: %ds", duration)
