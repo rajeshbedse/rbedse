@@ -200,13 +200,19 @@ def _download_bhavcopy(max_lookback: int = 5, as_of_date: date | None = None):
             continue
     return None
 
-def _parse_52_week_rows(text: str):
+_WEEK52_BASE = "https://nsearchives.nseindia.com/content/equities/CM_52_wk_High_low_{date}.csv"
+_WEEK52_API = "https://www.nseindia.com/api/daily-reports?key=CM"
+_WEEK52_HEADERS = {"User-Agent": USER_AGENT, "Accept": "application/json, text/plain, */*", "Referer": "https://www.nseindia.com/all-reports"}
+
+
+def _parse_52_week_rows(text: str) -> dict[str, dict[str, float | None]]:
+    text = text.lstrip("\ufeff")
     lines = text.splitlines()
     header_idx = next((i for i, line in enumerate(lines) if "Adjusted_52_Week_High" in line or "Adjusted 52_Week_High" in line), None)
     if header_idx is None:
         return {}
     rows = _csv.DictReader(lines[header_idx:])
-    result = {}
+    result: dict[str, dict[str, float | None]] = {}
     for row in rows:
         sym = (row.get("SYMBOL") or row.get("Symbol") or row.get("TckrSymb") or "").strip()
         if not sym:
@@ -225,6 +231,59 @@ def _parse_52_week_rows(text: str):
             "52WeekLow": _report_num("Adjusted 52_Week_Low", "Adjusted_52_Week_Low"),
         }
     return result
+
+
+def _download_52_week_report(max_lookback: int = 5, as_of_date: date | None = None) -> dict[str, dict[str, float | None]] | None:
+    """Download NSE's 52 Week High Low Report using report discovery when available."""
+    session = requests.Session()
+    session.headers.update(_WEEK52_HEADERS)
+    today = as_of_date or date.today()
+
+    try:
+        api = session.get(_WEEK52_API, timeout=20)
+        if api.status_code == 200:
+            payload = api.json()
+            candidates = payload.get("CurrentDay", []) + payload.get("PreviousDay", [])
+            for item in candidates:
+                if item.get("fileKey") != "CM-52 WEEK-HIGH_LOW":
+                    continue
+                trading_date = item.get("tradingDate")
+                file_path = item.get("filePath") or ""
+                file_name = item.get("fileActlName") or ""
+                if not file_path or not file_name:
+                    continue
+                url = f"{file_path}{file_name}"
+                resp = session.get(url, timeout=20)
+                if resp.status_code == 200:
+                    result = _parse_52_week_rows(resp.text)
+                    if result:
+                        log.info("  NSE 52-week report loaded via API for %s — %d symbols", trading_date, len(result))
+                        return result
+    except Exception as exc:
+        log.warning("  NSE 52-week report API fetch failed: %s", exc)
+
+    # Graceful archive fallback. Missing 52W data should never make the entire
+    # production scan unavailable; the validator handles this as a warning.
+    attempted: list[str] = []
+    for delta in range(max_lookback + 1):
+        d = today - timedelta(days=delta)
+        if d.weekday() >= 5:
+            continue
+        ds = d.strftime("%d%m%Y")
+        attempted.append(ds)
+        try:
+            resp = session.get(_WEEK52_BASE.format(date=ds), timeout=20)
+            if resp.status_code == 200:
+                result = _parse_52_week_rows(resp.text)
+                if result:
+                    log.info("  NSE 52-week report loaded from archive for %s — %d symbols", d.strftime("%Y-%m-%d"), len(result))
+                    return result
+        except Exception as exc:
+            log.warning("  NSE 52-week report archive fetch failed for %s: %s", ds, exc)
+    log.warning("  NSE 52-week report: no file found for dates %s", attempted)
+    return None
+
+
 
 def _fetch_52_week_prices(symbols, as_of_date=None):
     try:
