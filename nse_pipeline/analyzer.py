@@ -226,7 +226,7 @@ def _parse_52_week_rows(text: str) -> dict[str, dict[str, float | None]]:
                     except (ValueError, TypeError):
                         pass
             return None
-        result[sym] = {
+        result[sym.upper()] = {
             "52WeekHigh": _report_num("Adjusted 52_Week_High", "Adjusted_52_Week_High"),
             "52WeekLow": _report_num("Adjusted 52_Week_Low", "Adjusted_52_Week_Low"),
         }
