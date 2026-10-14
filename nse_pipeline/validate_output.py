@@ -181,17 +181,15 @@ def validate(run_dir: Path) -> list[str]:
                     f"52W validation: {both_count}/{len(full)} rows have both High+Low "
                     f"({coverage:.1f}%) | High populated={high_count} | Low populated={low_count}"
                 )
-                # 52-week data is supplementary enrichment. NSE can temporarily
-                # omit or move the report without invalidating the core scan.
+                # 52-week fields are required for reliable stock research.
                 if both_count == 0:
-                    warnings.append(
-                        "NSE 52-week High/Low data is unavailable for this run; "
-                        "continuing publication without it"
+                    errors.append(
+                        "NSE 52-week High/Low data is unavailable for this run"
                     )
                 elif coverage < 95:
                     warnings.append(
                         f"NSE 52-week High/Low coverage is only {coverage:.1f}% "
-                        "of enriched rows"
+                        "of enriched rows; review missing symbols"
                     )
                 invalid_range = (high.notna() & low.notna() & ((high <= 0) | (low <= 0) | (high < low))).sum()
                 if int(invalid_range) > 0:
