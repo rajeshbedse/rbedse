@@ -259,6 +259,7 @@ jobs:
           PY
 
           python scripts/augment_risk.py "${GITHUB_WORKSPACE}/output/${RUN_DATE}" data
+          python scripts/build_strongest_conviction_tracker.py
           python scripts/validate_snapshot.py
           test -s data/snapshot.json
           test -d data/stocks
