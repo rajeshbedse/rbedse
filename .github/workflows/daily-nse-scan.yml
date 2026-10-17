@@ -160,6 +160,8 @@ jobs:
           echo "Regulation 31 enrichment exit code: ${REG31_STATUS}"
 
           python scripts/build_snapshot.py "${GITHUB_WORKSPACE}/output/${RUN_DATE}"
+          mkdir -p data/research_snapshots
+          if [ ! -s "data/research_snapshots/${RUN_DATE}.json" ]; then cp data/snapshot.json "data/research_snapshots/${RUN_DATE}.json"; else echo "Preserving existing dated research snapshot for ${RUN_DATE}"; fi
 
           # Inject the benchmark explicitly from the published research CSV.
           # This keeps the benchmark contract independent of snapshot builder versioning.
